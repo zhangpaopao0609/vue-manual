@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>01-start</title>
+  </head>
+  <body>
+    <script>
+      // 用于存储 effct 函数
+      const bucket = new Set();
+
+      const data = { text: "Hello World" };
+
+      const obj = new Proxy(data, {
+        get(target, key) {
+          bucket.add(effect);
+          return target[key];
+        },
+        set(target, key, newVal) {
+          target[key] = newVal;
+          bucket.forEach((fn) => fn());
+          return true;
+        },
+      });
+
+      function effect() {
+        document.body.innerText = obj.text;
+      }
+
+      effect();
+
+      setTimeout(() => {
+        obj.text = "Hello Vue3";
+      }, 2000);
+    </script>
+  </body>
+</html>
