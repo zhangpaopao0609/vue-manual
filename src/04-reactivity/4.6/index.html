@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>4.6：避免无限递归循环</title>
+  </head>
+  <body>
+    <script>
+      const data = { foo: 1 };
+      const bucket = new WeakMap();
+      const effectStack = [];
+      let activeEffect = null;
+
+      const clean = function (activeEffect) {
+        for (let i = 0; i < activeEffect.deps.length; i++) {
+          const keyEffects = activeEffect.deps[i];
+          keyEffects.delete(activeEffect);
+        }
+        activeEffect.deps.length = 0;
+      };
+
+      const effect = function (fn) {
+        const effectFn = function () {
+          clean(effectFn);
+          activeEffect = effectFn;
+          // 在调用副作用函数之前，将当前副作用函数压入栈中
+          effectStack.push(activeEffect);
+          // 副作用函数执行，执行的过程就会进行收集的过程
+          fn();
+          // 副作用函数执行完毕后，将当前副作用函数弹出栈，并把 activeEffect 还原为之前的值
+          effectStack.pop();
+          activeEffect = effectStack[effectStack.length - 1];
+        };
+        effectFn.deps = [];
+        effectFn();
+      };
+
+      const track = function (target, key) {
+        if (!activeEffect) return target[key];
+        if (!bucket.has(target)) {
+          bucket.set(target, new Map());
+        }
+        const targetDeps = bucket.get(target);
+        if (!targetDeps.has(key)) {
+          targetDeps.set(key, new Set());
+        }
+        const keyEffects = targetDeps.get(key);
+        keyEffects.add(activeEffect);
+        activeEffect.deps.push(keyEffects);
+      };
+
+      const trigger = function (target, key) {
+        if (!bucket.has(target)) return;
+        const targetDeps = bucket.get(target);
+        if (!targetDeps.has(key)) return;
+        const keyEffects = targetDeps.get(key);
+
+        const effectsToRun = new Set();
+        keyEffects.forEach((effect) => {
+          if (effect !== activeEffect) {
+            effectsToRun.add(effect);
+          }
+        });
+        effectsToRun.forEach((fn) => fn());
+      };
+
+      const obj = new Proxy(data, {
+        get(target, key) {
+          track(target, key);
+          return target[key];
+        },
+        set(target, key, newVal) {
+          target[key] = newVal;
+          trigger(target, key);
+        },
+      });
+
+      // 这里即读取了又设置了，所以会栈溢出
+      // 解决办法很简单，如果当前执行的副作用函数和收集的副作用函数相同，那么就不执行
+      effect(function effectFn() {
+        obj.foo++;
+        console.log(obj.foo);
+      });
+      setTimeout(() => {
+        obj.foo = 3;
+      }, 1000);
+    </script>
+  </body>
+</html>
