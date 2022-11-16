@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>4.3</title>
+  </head>
+  <body>
+    <script>
+      const data = { text: "Hello World" };
+      // 桶的数据结构应该是
+      // 对象 -> 属性值 -> 收集的副作用函数
+      // map -> map -> set
+      // 第一层：对象名作为键，属性 map 作为值
+      // 第二层：属性名做为键，副作用函数 set 作为值
+      const bucket = new WeakMap();
+      // 这里为什么要用 WeakMap 而不是直接使用 Map 呢？
+      // WeakMap 是对 key 的弱引用，不影响垃圾回收的工作。于是根据这个特性可知，一旦 key 被垃圾回收器回收了，那么对应的键和值就访问不到了。所以 WeakMap 经常用于存储那些只有当 key 所引用的对象存在时（没有被收回）才有价值的信息。
+
+      // 收集副作用函数的函数
+      let activeEffect = null;
+      const effect = function (fn) {
+        activeEffect = fn;
+        fn();
+      };
+
+      const track = function (target, key) {
+        if (!activeEffect) return target[key];
+        if (!bucket.has(target)) {
+          bucket.set(target, new Map());
+        }
+        const targetMap = bucket.get(target);
+        if (!targetMap.has(key)) {
+          targetMap.set(key, new Set());
+        }
+        const keyDeps = targetMap.get(key);
+        keyDeps.add(activeEffect);
+      };
+
+      const trigger = function (target, key) {
+        if (!bucket.has(target)) return;
+        const targetMap = bucket.get(target);
+        if (!targetMap.has(key)) return;
+        const keyDeps = targetMap.get(key);
+        keyDeps.forEach((fn) => fn());
+      };
+
+      const obj = new Proxy(data, {
+        get(target, key) {
+          track(track, key);
+          return target[key];
+        },
+        set(target, key, newVal) {
+          target[key] = newVal;
+          trigger(target, key);
+        },
+      });
+
+      const addText = function () {
+        document.body.innerText = obj.text;
+      };
+
+      effect(addText);
+
+      setTimeout(() => {
+        obj.text = "Hello Vue3";
+      }, 2000);
+    </script>
+  </body>
+</html>
