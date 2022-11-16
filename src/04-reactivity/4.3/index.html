@@ -31,21 +31,21 @@
           if (!bucket.has(target)) {
             bucket.set(target, new Map());
           }
-          const targetMap = bucket.get(target);
-          if (!targetMap.has(key)) {
-            targetMap.set(key, new Set());
+          const targetDeps = bucket.get(target);
+          if (!targetDeps.has(key)) {
+            targetDeps.set(key, new Set());
           }
-          const keyDeps = targetMap.get(key);
-          keyDeps.add(activeEffect);
+          const keyEffects = targetDeps.get(key);
+          keyEffects.add(activeEffect);
           return target[key];
         },
         set(target, key, newVal) {
           target[key] = newVal;
           if (!bucket.has(target)) return true;
-          const targetMap = bucket.get(target);
-          if (!targetMap.has(key)) return true;
-          const keyDeps = targetMap.get(key);
-          keyDeps.forEach((fn) => fn());
+          const targetDeps = bucket.get(target);
+          if (!targetDeps.has(key)) return true;
+          const keyEffects = targetDeps.get(key);
+          keyEffects.forEach((fn) => fn());
           return true;
         },
       });

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>4.4</title>
+  </head>
+  <body>
+    <script>
+      const data = { ok: true, text: "Hello World" };
+      const bucket = new WeakMap();
+      let activeEffect = null;
+
+      const clean = function (activeEffect) {
+        for (let i = 0; i < activeEffect.deps.length; i++) {
+          // 依赖集合（就是 副作用函数 集合）
+          const keyEffects = activeEffect.deps[i];
+          // 因为进行了双向收集，所以这个依赖集合中一定存在这个副作用函数，删除
+          keyEffects.delete(activeEffect);
+        }
+        activeEffect.deps.length = 0;
+      };
+
+      const effect = function (fn) {
+        const effectFn = function () {
+          // 当 effect 激活时，将其设置为当前激活的副作用函数
+          activeEffect = effectFn;
+          // 再次执行副作用函数时，在所有将之关联的依赖集合中清除此副作用函数，因为它会重新收集的
+          clean(activeEffect);
+          fn();
+        };
+        // activeEffect.deps 用于存储所有与该副作用函数相关联的依赖集合，好用于再次执行副作用函数时清除
+        effectFn.deps = [];
+        effectFn();
+      };
+
+      const track = function (target, key) {
+        if (!activeEffect) return target[key];
+        if (!bucket.has(target)) {
+          bucket.set(target, new Map());
+        }
+        const targetDeps = bucket.get(target);
+        if (!targetDeps.has(key)) {
+          targetDeps.set(key, new Set());
+        }
+        const keyEffects = targetDeps.get(key);
+        keyEffects.add(activeEffect);
+        activeEffect.deps.push(keyEffects);
+      };
+
+      const trigger = function (target, key) {
+        if (!bucket.has(target)) return;
+        const targetDeps = bucket.get(target);
+        if (!targetDeps.has(key)) return;
+        const keyEffects = targetDeps.get(key);
+        const effectsToRun = new Set(keyEffects);
+        effectsToRun.forEach((fn) => fn());
+      };
+
+      const obj = new Proxy(data, {
+        get(target, key) {
+          track(target, key);
+          return target[key];
+        },
+        set(target, key, newVal) {
+          target[key] = newVal;
+          trigger(target, key);
+        },
+      });
+
+      effect(function effectFn() {
+        document.body.innerText = obj.ok ? obj.text : "not";
+      });
+
+      setTimeout(() => {
+        obj.ok = false;
+      }, 2000);
+    </script>
+  </body>
+</html>
