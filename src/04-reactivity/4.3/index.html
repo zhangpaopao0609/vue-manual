@@ -27,7 +27,7 @@
 
       const obj = new Proxy(data, {
         get(target, key) {
-          if (!activeEffect) return target[key];
+          if (!activeEffect) return;
           if (!bucket.has(target)) {
             bucket.set(target, new Map());
           }

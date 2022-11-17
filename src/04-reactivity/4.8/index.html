@@ -4,11 +4,11 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>4.6：避免无限递归循环</title>
+    <title>4.8：计算属性 computed 与 lazy</title>
   </head>
   <body>
     <script>
-      const data = { foo: 1 };
+      const data = { foo: 1, bar: 2 };
       const bucket = new WeakMap();
       const effectStack = [];
       let activeEffect = null;
@@ -21,20 +21,26 @@
         activeEffect.deps.length = 0;
       };
 
-      const effect = function (fn) {
+      const effect = function (fn, options = {}) {
         const effectFn = function () {
           clean(effectFn);
           activeEffect = effectFn;
           // 在调用副作用函数之前，将当前副作用函数压入栈中
           effectStack.push(activeEffect);
           // 副作用函数执行，执行的过程就会进行收集的过程
-          fn();
+          const res = fn();
           // 副作用函数执行完毕后，将当前副作用函数弹出栈，并把 activeEffect 还原为之前的值
           effectStack.pop();
           activeEffect = effectStack[effectStack.length - 1];
+          return res;
         };
         effectFn.deps = [];
-        effectFn();
+        // 将 options 挂载到 effectFn 上
+        effectFn.options = options;
+        // 非 lazy 则立即执行
+        if (!options.lazy) effectFn();
+        // 将副作用函数作为返回值返回
+        return effectFn;
       };
 
       const track = function (target, key) {
@@ -63,7 +69,42 @@
             effectsToRun.add(effect);
           }
         });
-        effectsToRun.forEach((fn) => fn());
+        effectsToRun.forEach((effectFn) => {
+          // 副作用函数存在调度器，则调用改调度器，并将副作用函数作为参数传递
+          if (effectFn.options.scheduler) {
+            effectFn.options.scheduler(effectFn);
+          } else {
+            // 默认行为
+            effectFn();
+          }
+        });
+      };
+
+      const computed = function (getter) {
+        // 是否需要重新计算，当依赖发生变化的时候才计算，否者使用缓存值
+        let dirty = true;
+        // 缓存值
+        let value = null;
+        const effectFn = effect(getter, {
+          lazy: true,
+          scheduler() {
+            dirty = true;
+            trigger(obj, "value");
+          },
+        });
+
+        const obj = {
+          get value() {
+            if (dirty) {
+              value = effectFn();
+              dirty = false;
+            }
+            track(obj, "value");
+            return value;
+          },
+        };
+
+        return obj;
       };
 
       const obj = new Proxy(data, {
@@ -77,15 +118,13 @@
         },
       });
 
-      // 这里即读取了又设置了，所以会栈溢出
-      // 解决办法很简单，如果当前执行的副作用函数和收集的副作用函数相同，那么就不执行
-      effect(function effectFn() {
-        obj.foo++;
-        console.log(obj.foo);
-      });
-      setTimeout(() => {
-        obj.foo = 3;
-      }, 1000);
+      const sumRes = computed(() => obj.bar + obj.foo);
+
+      // obj.foo++;
+
+      console.log(sumRes.value);
+      obj.bar++;
+      console.log(sumRes.value);
     </script>
   </body>
 </html>

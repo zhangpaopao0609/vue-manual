@@ -36,7 +36,7 @@
       };
 
       const track = function (target, key) {
-        if (!activeEffect) return target[key];
+        if (!activeEffect) return;
         if (!bucket.has(target)) {
           bucket.set(target, new Map());
         }
