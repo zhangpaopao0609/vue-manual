@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>4.9 watch 的实现原理</title>
+  </head>
+  <body>
+    <script>
+      const data = { foo: 1, bar: 2 };
+      const bucket = new WeakMap();
+      const effectStack = [];
+      let activeEffect = null;
+
+      const clean = function (activeEffect) {
+        for (let i = 0; i < activeEffect.deps.length; i++) {
+          const keyEffects = activeEffect.deps[i];
+          keyEffects.delete(activeEffect);
+        }
+        activeEffect.deps.length = 0;
+      };
+
+      const effect = function (fn, options = {}) {
+        const effectFn = function () {
+          clean(effectFn);
+          activeEffect = effectFn;
+          // 在调用副作用函数之前，将当前副作用函数压入栈中
+          effectStack.push(activeEffect);
+          // 副作用函数执行，执行的过程就会进行收集的过程
+          const res = fn();
+          // 副作用函数执行完毕后，将当前副作用函数弹出栈，并把 activeEffect 还原为之前的值
+          effectStack.pop();
+          activeEffect = effectStack[effectStack.length - 1];
+          return res;
+        };
+        effectFn.deps = [];
+        // 将 options 挂载到 effectFn 上
+        effectFn.options = options;
+        // 非 lazy 则立即执行
+        if (!options.lazy) effectFn();
+        // 将副作用函数作为返回值返回
+        return effectFn;
+      };
+
+      const track = function (target, key) {
+        if (!activeEffect) return;
+        if (!bucket.has(target)) {
+          bucket.set(target, new Map());
+        }
+        const targetDeps = bucket.get(target);
+        if (!targetDeps.has(key)) {
+          targetDeps.set(key, new Set());
+        }
+        const keyEffects = targetDeps.get(key);
+        keyEffects.add(activeEffect);
+        activeEffect.deps.push(keyEffects);
+      };
+
+      const trigger = function (target, key) {
+        if (!bucket.has(target)) return;
+        const targetDeps = bucket.get(target);
+        if (!targetDeps.has(key)) return;
+        const keyEffects = targetDeps.get(key);
+
+        const effectsToRun = new Set();
+        keyEffects.forEach((effect) => {
+          if (effect !== activeEffect) {
+            effectsToRun.add(effect);
+          }
+        });
+        effectsToRun.forEach((effectFn) => {
+          // 副作用函数存在调度器，则调用改调度器，并将副作用函数作为参数传递
+          if (effectFn.options.scheduler) {
+            effectFn.options.scheduler(effectFn);
+          } else {
+            // 默认行为
+            effectFn();
+          }
+        });
+      };
+
+      const computed = function (getter) {
+        // 是否需要重新计算，当依赖发生变化的时候才计算，否者使用缓存值
+        let dirty = true;
+        // 缓存值
+        let value = null;
+        const effectFn = effect(getter, {
+          lazy: true,
+          scheduler() {
+            dirty = true;
+            trigger(obj, "value");
+          },
+        });
+
+        const obj = {
+          get value() {
+            if (dirty) {
+              value = effectFn();
+              dirty = false;
+            }
+            track(obj, "value");
+            return value;
+          },
+        };
+
+        return obj;
+      };
+
+      const obj = new Proxy(data, {
+        get(target, key) {
+          track(target, key);
+          return target[key];
+        },
+        set(target, key, newVal) {
+          target[key] = newVal;
+          trigger(target, key);
+        },
+      });
+
+      const trvarse = function (value, seen = new Set()) {
+        // 如果读取的是原始值，或者已经被读取过了，那么什么都不做
+        if (typeof obj !== "object" || value === null || seen.has(value))
+          return;
+        // 将数据添加到 seen 中，代表遍历地读取过了，避免循环引用引起的死缓存
+        seen.add(value);
+        // 暂时不考虑数组等其它结构
+        for (const k in value) {
+          trvarse(value[k], seen);
+        }
+
+        return value;
+      };
+
+      const watch = function (source, cb) {
+        let getter = null;
+        // 当 source 的属性发生变化时，需要执行 cb
+        // 也就是说要在 source 的所有属性的依赖集合中添加上 cb，那肯定需要用到 effct，例如 effect()
+        // 这该怎么做呢？难道说 source 每一个属性都用一个 effect 吗？不用，可以利用 scheduler，因为 scheduler 其实就相当于是一个回调了
+        let oldVal = null;
+        let newVal = null;
+
+        if (typeof source === "function") {
+          getter = source;
+        } else {
+          getter = () => trvarse(source);
+        }
+
+        const effectFn = effect(() => getter(), {
+          lazy: true,
+          scheduler() {
+            newVal = effectFn();
+            cb(oldVal, newVal);
+            oldVal = newVal;
+          },
+        });
+
+        oldVal = effectFn();
+      };
+
+      watch(obj, (oldVal, newVal) => {
+        console.log(oldVal, newVal);
+      });
+
+      obj.bar++;
+    </script>
+  </body>
+</html>
