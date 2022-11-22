@@ -56,15 +56,15 @@
       const trigger = function (target, key) {
         if (!bucket.has(target)) return;
         const targetDeps = bucket.get(target);
-        if (!targetDeps.has(key)) return;
         const keyEffects = targetDeps.get(key);
 
         const effectsToRun = new Set();
-        keyEffects.forEach((effect) => {
-          if (effect !== activeEffect) {
-            effectsToRun.add(effect);
-          }
-        });
+        keyEffects &&
+          keyEffects.forEach((effect) => {
+            if (effect !== activeEffect) {
+              effectsToRun.add(effect);
+            }
+          });
         effectsToRun.forEach((effectFn) => {
           // 副作用函数存在调度器，则调用改调度器，并将副作用函数作为参数传递
           if (effectFn.options.scheduler) {

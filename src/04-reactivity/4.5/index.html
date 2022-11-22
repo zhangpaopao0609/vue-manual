@@ -54,8 +54,7 @@
       const trigger = function (target, key) {
         if (!bucket.has(target)) return;
         const targetDeps = bucket.get(target);
-        if (!targetDeps.has(key)) return;
-        const keyEffects = targetDeps.get(key);
+        const keyEffects = targetDeps.get(key) || [];
         const effectsToRun = new Set(keyEffects);
         effectsToRun.forEach((fn) => fn());
       };

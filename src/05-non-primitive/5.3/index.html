@@ -4,14 +4,20 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>4.10 立即执行的 watch 与回调执行时机</title>
+    <title>5.3 如何代理 Object</title>
   </head>
   <body>
     <script>
-      const data = { foo: 1, bar: 2 };
       const bucket = new WeakMap();
       const effectStack = [];
+      const ITERATE_KEY = Symbol();
       let activeEffect = null;
+
+      const TriggeType = {
+        SET: "SET",
+        ADD: "ADD",
+        DELETE: "DELETE",
+      };
 
       const clean = function (activeEffect) {
         for (let i = 0; i < activeEffect.deps.length; i++) {
@@ -57,7 +63,7 @@
         activeEffect.deps.push(keyEffects);
       };
 
-      const trigger = function (target, key) {
+      const trigger = function (target, key, type) {
         if (!bucket.has(target)) return;
         const targetDeps = bucket.get(target);
         const keyEffects = targetDeps.get(key);
@@ -69,6 +75,18 @@
               effectsToRun.add(effect);
             }
           });
+
+        // 仅当操作类型为 ADD 或 DELETE 时，才执行与 ITERATE_KEY 相关联的副作用函数
+        if (type === TriggeType.ADD || type === TriggeType.DELETE) {
+          const iterateEffects = targetDeps.get(ITERATE_KEY);
+          iterateEffects &&
+            iterateEffects.forEach((effect) => {
+              if (effect !== activeEffect) {
+                effectsToRun.add(effect);
+              }
+            });
+        }
+
         effectsToRun.forEach((effectFn) => {
           // 副作用函数存在调度器，则调用改调度器，并将副作用函数作为参数传递
           if (effectFn.options.scheduler) {
@@ -107,17 +125,6 @@
         return obj;
       };
 
-      const obj = new Proxy(data, {
-        get(target, key) {
-          track(target, key);
-          return target[key];
-        },
-        set(target, key, newVal) {
-          target[key] = newVal;
-          trigger(target, key);
-        },
-      });
-
       const trvarse = function (value, seen = new Set()) {
         // 如果读取的是原始值，或者已经被读取过了，那么什么都不做
         if (typeof obj !== "object" || value === null || seen.has(value))
@@ -146,9 +153,17 @@
           getter = () => trvarse(source);
         }
 
+        // 用于存储用户注册的过期回调
+        let cleanup;
+
+        const onInvalidate = function (fn) {
+          cleanup = fn;
+        };
+
         const job = () => {
           newVal = effectFn();
-          cb(oldVal, newVal);
+          if (cleanup) cleanup();
+          cb(oldVal, newVal, onInvalidate);
           oldVal = newVal;
         };
 
@@ -171,16 +186,65 @@
           oldVal = effectFn();
         }
       };
+    </script>
 
-      watch(
-        obj,
-        (oldVal, newVal) => {
-          console.log(oldVal, newVal);
+    <script>
+      const data = {
+        foo: 1,
+      };
+
+      const obj = new Proxy(data, {
+        get(target, key, receiver) {
+          track(target, key);
+          return Reflect.get(target, key, receiver);
         },
-        { immediate: true, flush: "post" }
-      );
+        set(target, key, newVal, receiver) {
+          // 如果属性不存在，则说明是在添加属性，否则是设置已有属性
+          const type = Object.prototype.hasOwnProperty.call(target, key)
+            ? TriggeType.SET
+            : TriggeType.ADD;
 
-      obj.bar++;
+          const res = Reflect.set(target, key, newVal, receiver);
+
+          trigger(target, key, type);
+          return res;
+        },
+        has(target, key) {
+          track(target, key);
+          return Reflect.has(target, key);
+        },
+        ownKeys(target) {
+          // 将副作用函数与 ITERATE_KEY 关联
+          track(target, ITERATE_KEY);
+          return Reflect.ownKeys(target);
+        },
+        deleteProperty(target, key) {
+          // 检查是否是对象自己的属性
+          const hasKey = Object.prototype.hasOwnProperty.call(target, key);
+          // 执行操作
+          const res = Reflect.deleteProperty(target, key);
+          if (res && hasKey) {
+            // 仅当被删除的属性是对象自己的属性并且删除成功时，才触发更新
+            trigger(target, key, TriggeType.DELETE);
+          }
+          return res;
+        },
+      });
+
+      effect(() => {
+        for (const key in obj) {
+          console.log(key);
+        }
+      });
+
+      setTimeout(() => {
+        obj.bar = 2;
+        obj.lck = 3;
+      }, 1000);
+
+      setTimeout(() => {
+        delete obj.lck;
+      }, 2000);
     </script>
   </body>
 </html>

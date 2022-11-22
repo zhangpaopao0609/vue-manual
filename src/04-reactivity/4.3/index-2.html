@@ -41,9 +41,8 @@
       const trigger = function (target, key) {
         if (!bucket.has(target)) return;
         const targetDeps = bucket.get(target);
-        if (!targetDeps.has(key)) return;
         const keyEffects = targetDeps.get(key);
-        keyEffects.forEach((fn) => fn());
+        keyEffects && keyEffects.forEach((fn) => fn());
       };
 
       const obj = new Proxy(data, {
