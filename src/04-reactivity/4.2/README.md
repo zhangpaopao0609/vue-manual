@@ -23,3 +23,32 @@
 
   读取 obj.a 时，用一个全局桶来记录副作用函数。
   当设置 obj.a 时，把全局桶里面的副作用函数拿出来，执行一遍即可实现。
+
+
+  ```js
+  const obj = { a: 1 };
+    
+    // 用于存储副作用函数
+    const bucket = new Set();
+
+    const p = new Proxy(obj, {
+      get(target, key){
+        bucket.add(effect)
+        return target[key]
+      },
+      set(target, key, val){
+        target[key] = val;
+        bucket.forEach(fn => fn());
+        return val
+      }
+    })
+
+    function effect() {
+      document.body.innerHTML = p.a
+    }
+
+    effect();
+    setTimeout(() => {
+      p.a = 2
+    }, 1000)
+    ```
