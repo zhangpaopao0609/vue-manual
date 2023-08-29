@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>4.2 响应式数据的基本实现</title>
+</head>
+
+<body>
+  <script>
+    const obj = { a: 1 };
+    
+    // 用于存储副作用函数
+    const bucket = new Set();
+
+    const p = new Proxy(obj, {
+      get(target, key){
+        bucket.add(effect)
+        return target[key]
+      },
+      set(target, key, val){
+        target[key] = val;
+        bucket.forEach(fn => fn());
+        return val
+      }
+    })
+
+    function effect() {
+      document.body.innerHTML = p.a
+    }
+
+    effect();
+    setTimeout(() => {
+      p.a = 2
+    }, 1000)
+  </script>
+</body>
+
+</html>
