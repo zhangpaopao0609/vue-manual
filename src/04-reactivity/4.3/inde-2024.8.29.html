@@ -41,7 +41,6 @@
         const keySet = targetMap.get(key);
         // 把副作用函数放进 keySet
         keySet.add(activeEffectFn);
-        activeEffectFn = null;
       }
 
       function trigger(target, key) {
