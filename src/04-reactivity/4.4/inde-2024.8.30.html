@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>4.3 完善的响应式</title>
+</head>
+
+<body>
+  <div id="a"></div>
+  <div id="b"></div>
+  <script>
+    // 用户收集副作用函数的桶
+    const bucket = new Map();
+    // 记录当前的副作用函数
+    let activeEffectFn = null;
+    // 收集副作用函数的函数
+    function effect(fn) {
+      activeEffectFn = fn;
+      fn();
+    };
+    // 将 obj 设置为响应式对象
+    function reactive(obj) {
+      function track(target, key) {
+        if (!activeEffectFn) return;
+        // target 对应的 map，这个 map 是用于收集所有属性的
+        if (!bucket.has(target)) {
+          bucket.set(target, new Map());
+        };
+        const targetMap = bucket.get(target);
+        // key 对应的 set，这个 set 是用于收集这个属性对应的所有副作用函数
+        if (!targetMap.has(key)) {
+          targetMap.set(key, new Set())
+        }
+        const keySet = targetMap.get(key);
+        // 把副作用函数放进 keySet
+        keySet.add(activeEffectFn);
+        activeEffectFn = null;
+      }
+
+      function trigger(target, key) {
+        const targetMap = bucket.get(target);
+        if (!targetMap) return;
+        const keySet = targetMap.get(key);
+        if (!keySet) return;
+        keySet.forEach(fn => fn())
+      }
+
+      return new Proxy(obj, {
+        get(target, key) {
+          track(target, key)
+          return target[key]
+        },
+        set(target, key, val) {
+          target[key] = val;
+          trigger(target, key)
+        },
+      });
+    }
+  </script>
+
+  <script>
+    // 原始数据
+    const data = { a: 1, b: 11 };
+    const p = reactive(data)
+
+    effect(() => {
+      const a = document.getElementById('a')
+      a.innerHTML = p.a
+    })
+
+    effect(() => {
+      const b = document.getElementById('b')
+      b.innerHTML = p.b
+    })
+
+    setTimeout(() => {
+      p.a = 2
+    }, 1000)
+
+    setTimeout(() => {
+      p.b = 444
+    }, 2000)
+  </script>
+</body>
+
+</html>
