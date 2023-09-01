@@ -103,56 +103,77 @@ function computed(getter) {
   return obj;
 }
 
-function watch(source, cb, options={}) {
-  let getter = null;
-
-  function travrse(obj) {
-    // 读取所有的字段
-    if(!obj || typeof obj !== 'object') return;
-    for(let key in obj) {
-      obj[key]
+function watch(source, cb, options = {}) {
+  let getter;
+  function traverse(value, seen=new Set()) {
+    if(typeof value !== 'object' || value === null || seen.has(value)) return
+    seen.add(value)
+    for(const k in value) {
+      traverse(value[k], seen)
     }
-    return obj
+
+    return value
   }
 
   if(typeof source === 'function') {
-    getter = source;
+    getter = source
   } else {
-    getter = () => travrse(source);
+    getter = () => traverse(source)
   }
-  let newValue = null;
-  let oldValue = null;
+
+  let cleanup;
+  let oldValue;
+  let newValue;
+
+  const onInvalidate = (cb) => {
+    cleanup = cb;
+  }
 
   const job = () => {
+    if(cleanup) cleanup();
     newValue = effectFn();
-    cb(newValue, oldValue);
-    oldValue = newValue;
+    cb(newValue, oldValue, onInvalidate);
+    oldValue = newValue
   }
 
-  const effectFn = effect(getter, { 
+  const effectFn = effect(getter, {
     lazy: true,
     scheduler() {
-      if(options.flush === 'post') {
-        Promise.resolve().then(job);
+      if(options.post === 'flush') {
+        Pormise.resolve().then(job)
       } else {
-        job();
+        job()
       }
-    } 
+    }
   });
-  if(options.immediate) {
+
+  if (options.immediate) {
     job()
   } else {
     oldValue = effectFn()
   }
 }
 
-const data = { a: 11, b: 2 };
+const data = { a: 5, b: 2 };
 const obj = reactive(data);
 
-watch(obj, (newValue, oldValue) => {
-  console.log('obj 发生变化了', newValue, oldValue)
-}, { immediate: true, flush: 'post' });
+watch(obj, async (newValue, oldValue, onInvalidate) => {
+  let expired = false;
+
+  // 调用 onInvalidate 函数注册一个过期回调
+  onInvalidate(() => {
+    expired = true;
+  })
+  console.log('obj.a', obj.a);
+  const a = obj.a;
+  const res = await new Promise(resolve => setTimeout(() => resolve(a), 1000 * a));
+  
+  if(!expired) {
+    finalData = res;
+    console.log('finalData', finalData);
+  }
+}, { immediate: true });
 
 setTimeout(() => {
-  obj.a++
+  obj.a = obj.a - 3;
 }, 1000);
