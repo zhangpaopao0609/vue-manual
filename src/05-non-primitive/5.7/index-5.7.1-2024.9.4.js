@@ -49,7 +49,7 @@ function track(target, key) {
   activeEffectFn.deps.add(keySet);
 }
 
-function trigger(target, key, type) {
+function trigger(target, key, type, newVal) {
   const targetMap = bucket.get(target);
   if (!targetMap) return;
   const keySet = targetMap.get(key);
@@ -68,6 +68,30 @@ function trigger(target, key, type) {
       }
     });
   }
+  // 当代理的对象为数组时，并且在增加元素时
+  if(Array.isArray(target) && type === TriggerType.ADD) {
+    const lengthEffects = targetMap.get('length');
+    lengthEffects && lengthEffects.forEach(fn => {
+      if (fn !== activeEffectFn) {
+        keySetToRun.add(fn)
+      }
+    });
+  }
+
+    // 当代理的对象为数组时，并且并且修改的键为 length 时
+    if(Array.isArray(target) && key === 'length') {
+      targetMap.forEach((effects, key) => {
+        console.log(key);
+        if(key >= newVal) {
+          effects.forEach(fn => {
+            if (fn !== activeEffectFn) {
+              keySetToRun.add(fn)
+            }
+          });
+        }
+      })
+    }
+
   keySetToRun.forEach(fn => {
     if (fn.options.scheduler) {
       fn.options.scheduler(fn)
@@ -103,15 +127,19 @@ function createReactive(obj, isShallow = false, isReadonly = false) {
       const oldVal = target[key];
       // 如果属性不存在，则说明是添加新属性，否则是设置已有属性
       const type = 
-        Object.prototype.hasOwnProperty.call(target, key)
-          ? TriggerType.SET 
-          : TriggerType.ADD;
+        Array.isArray(target)
+          ? Number(key) < target.length
+            ? TriggerType.SET
+            : TriggerType.ADD
+          : Object.prototype.hasOwnProperty.call(target, key)
+            ? TriggerType.SET 
+            : TriggerType.ADD;
       const res = Reflect.set(target, key, newVal, receiver);
       // target === receiver[RAW_KEY] 说明 receiver 就是 target 的代理对象
       if(target === receiver[RAW_KEY]) {
-         // 当值真正发生变化并且都不是 NaN 的时候；NaN === NaN false
+        // 当值真正发生变化并且都不是 NaN 的时候；NaN === NaN false
         if(oldVal !== newVal && (oldVal === oldVal || newVal === newVal)) {
-          trigger(target, key, type);
+          trigger(target, key, type, newVal);
         }
       }
       return res;
@@ -241,9 +269,18 @@ function watch(source, cb, options = {}) {
   }
 }
 
-const obj = {
-  a: 1,
-}
+const p = reactive([0, 1, 2, 3]);
 
-const p = reactive(obj)
+effect(() => {
+  console.log(p[0], p[1], p[2]);
+});
 
+effect(() => {
+  console.log(p.length);
+})
+
+console.log(bucket);
+
+setTimeout(() => {
+  p.length = 0;
+}, 1000);
