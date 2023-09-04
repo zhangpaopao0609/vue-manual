@@ -78,18 +78,19 @@ function trigger(target, key, type, newVal) {
     });
   }
 
-  // 当代理的对象为数组时，并且并且修改的键为 length 时
-  if(Array.isArray(target) && key === 'length') {
-    targetMap.forEach((effects, key) => {
-      if(key >= newVal) {
-        effects.forEach(fn => {
-          if (fn !== activeEffectFn) {
-            keySetToRun.add(fn)
-          }
-        });
-      }
-    })
-  }
+    // 当代理的对象为数组时，并且并且修改的键为 length 时
+    if(Array.isArray(target) && key === 'length') {
+      targetMap.forEach((effects, key) => {
+        console.log(key);
+        if(key >= newVal) {
+          effects.forEach(fn => {
+            if (fn !== activeEffectFn) {
+              keySetToRun.add(fn)
+            }
+          });
+        }
+      })
+    }
 
   keySetToRun.forEach(fn => {
     if (fn.options.scheduler) {
@@ -268,36 +269,18 @@ function watch(source, cb, options = {}) {
   }
 }
 
-// const p = reactive([0, 1, 2, 3]);
-
-// effect(() => {
-//   console.log('3->', p[3]);
-// })
-
-// effect(() => {
-//   console.log('length->', p.length);
-// })
-
-// setTimeout(() => {
-//   p[3] = 1;  // 此处不应该触发 length 收集的副作用函数，触发的应该是 bucket => [0,1,2,3] => 3 对应收集的副作用函数
-// }, 1000);
-
-// setTimeout(() => {
-//   p[4] = 4; // 此处应该触发 length 收集的副作用函数
-// }, 2000);
-
-
-
-
-
-
 const p = reactive([0, 1, 2, 3]);
 
 effect(() => {
-  // 这里会收集 0 1 2 3 及其副作用函数
-  console.log('0,1,2,3->', p[0], p[1], p[2], p[3]);
+  console.log(p[0], p[1], p[2]);
+});
+
+effect(() => {
+  console.log(p.length);
 })
 
+console.log(bucket);
+
 setTimeout(() => {
-  p.length = 1; // 此处应该触发 元素索引 对应收集的副作用函数
-}, 2000);
+  p.length = 0;
+}, 1000);
