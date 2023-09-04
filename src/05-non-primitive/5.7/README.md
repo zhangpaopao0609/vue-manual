@@ -106,3 +106,55 @@ function trigger(target, key, type, newVal) {
 ...
 }
 ```
+
+## 5.7.2 数组的遍历
+
+1. for in 遍历（当然，不推荐 for in 遍历数组哈，for in 主要用于对象的遍历）
+
+跟对象一样，forin 使用 ownkeys 拦截，只是，这里不再使用 `ITERATE_KEY` 作为收集的 key 了，而是使用 `length`，因为对于普通对象来说，删除或者增加属性值才就会影响到对象的 forin 遍历，而对于数组而言，
+
+```js
+p[100] = 100
+p.length = 1
+```
+
+其实，无论是为数组添加新元素，还是直接修改数组的长度，本质都是因为修改了数组的 length 属性。一旦数组的 length 属性改变，那么 forin 循环就会发生变化，
+
+
+2. for of 遍历
+
+> for of 是用来遍历可迭代对象的，可迭代对象都存在一个迭代方法 Symbol.iterator  @@iterator
+> @@iterator 返回一个名为 next 的函数，next 函数返回一个包含 value 和 done 的对象，value 是本次迭代展示的值，done 是指迭代是否结束
+
+for of 会读取数组的 length 属性以及各元素本身，所以目前的做法就可以实现响应了。
+
+3. symbol
+
+for of 除了会读取数组的 length 属性以及各元素本身外，还会读取 Symbol.iterator 属性，这个属性就是迭代器方法，所以在 bucket 中可以看到（收集了） symbol 对应的副作用函数
+
+```js
+Map(1) {
+  [ 0, 1, 2, 3 ] => Map(6) {
+    Symbol(Symbol.iterator) => Set(1) { [Function] },
+    'length' => Set(1) { [Function] },
+    '0' => Set(1) { [Function] },
+    '1' => Set(1) { [Function] },
+    '2' => Set(1) { [Function] },
+    '3' => Set(1) { [Function] }
+  }
+}
+```
+
+这可能引发错误，而且也没必要收集。
+
+错误：当修改了数组 length 时，为了那些索引值大于或等于修改的数组 length 的副作用函数能够执行，需要进行判断 if(key >= newVal) 就要执行，这里当 key 为 Symbol 时就会出错。
+
+当然，也完全没有必要收集 Symbol
+
+所以，可以在收集的时候拦截一下
+
+```js
+if(!isReadonly && typeof key !== SYMBOL_TYPE) {
+  track(target, key);
+}
+```

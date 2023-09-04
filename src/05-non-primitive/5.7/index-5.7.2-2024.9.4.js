@@ -30,7 +30,9 @@ const TriggerType = {
   ADD: 'ADD',
   DELETE: 'DELETE'
 }
-const RAW_KEY = Symbol()
+const RAW_KEY = Symbol();
+const LENGTH_KEY = 'length';
+const SYMBOL_TYPE = 'symbol'
 
 function track(target, key) {
   if (!activeEffectFn) return;
@@ -70,7 +72,7 @@ function trigger(target, key, type, newVal) {
   }
   // 当代理的对象为数组时，并且在增加元素时
   if(Array.isArray(target) && type === TriggerType.ADD) {
-    const lengthEffects = targetMap.get('length');
+    const lengthEffects = targetMap.get(LENGTH_KEY);
     lengthEffects && lengthEffects.forEach(fn => {
       if (fn !== activeEffectFn) {
         keySetToRun.add(fn)
@@ -78,19 +80,18 @@ function trigger(target, key, type, newVal) {
     });
   }
 
-    // 当代理的对象为数组时，并且并且修改的键为 length 时
-    if(Array.isArray(target) && key === 'length') {
-      targetMap.forEach((effects, key) => {
-        console.log(key);
-        if(key >= newVal) {
-          effects.forEach(fn => {
-            if (fn !== activeEffectFn) {
-              keySetToRun.add(fn)
-            }
-          });
-        }
-      })
-    }
+  // 当代理的对象为数组时，并且并且修改的键为 length 时
+  if(Array.isArray(target) && key === LENGTH_KEY) {
+    targetMap.forEach((effects, key) => {
+      if(key >= newVal) {
+        effects.forEach(fn => {
+          if (fn !== activeEffectFn) {
+            keySetToRun.add(fn)
+          }
+        });
+      }
+    })
+  }
 
   keySetToRun.forEach(fn => {
     if (fn.options.scheduler) {
@@ -108,7 +109,7 @@ function createReactive(obj, isShallow = false, isReadonly = false) {
       if(key === RAW_KEY) {
         return target;
       };
-      if(!isReadonly) {
+      if(!isReadonly && typeof key !== SYMBOL_TYPE) {
         track(target, key);
       }
       const res = Reflect.get(target, key, receiver);
@@ -149,7 +150,7 @@ function createReactive(obj, isShallow = false, isReadonly = false) {
       return Reflect.has(target, key)
     },
     ownKeys(target) {
-      track(target, ITERATE_KEY)
+      track(target, Array.isArray(target) ? LENGTH_KEY : ITERATE_KEY)
       return Reflect.ownKeys(target)
     },
     deleteProperty(target, key) {
@@ -271,16 +272,26 @@ function watch(source, cb, options = {}) {
 
 const p = reactive([0, 1, 2, 3]);
 
-effect(() => {
-  console.log(p[0], p[1], p[2]);
-});
+// effect(() => {
+//   for (const value in p) {
+//     console.log('for-in', value);
+//   }
+// });
 
 effect(() => {
-  console.log(p.length);
+  for (const value of p) {
+    console.log('for-of', value);
+  }
 })
+
+// effect(() => {
+//   p.forEach((v) => {
+//     console.log('forEach', v);
+//   })
+// })
 
 console.log(bucket);
 
 setTimeout(() => {
-  p.length = 0;
+  p.length = 1;
 }, 1000);
