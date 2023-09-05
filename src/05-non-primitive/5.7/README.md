@@ -280,3 +280,47 @@ funciton createReactive() {
 
 当然，除了 includes，还有其它的查找方法也是一致的，indexOf，lastIndexOf
 
+## 5.7.4 隐式修改数组长度的原型方法
+
+push/pop/unshift/shift/splice
+
+这些方法既会读取数组的 length 同时也会设置数组的 length，所以这会导致两个独立的副作用函数相互触发，最终会栈溢出
+
+```js
+const p = reactive([0]);
+
+effect(() => {
+  p.push(1);
+})
+
+effect(() => {
+  p.push(1);
+})
+```
+
+那么怎么解决呢？很简单，因为 push 方法在语义上是修改操作，而非读取操作，所以让它不要走收集流程，仅走设置流程就好了，所以当数组 push 时，重写一下 push 方法，push 的时候不收集。
+
+```js
+// 一个标记变量，代表是否进行追踪。
+let shouldTrack = true;
+
+;['push'].forEach(method => {
+  // 数组的原始方法
+  const originMethod = Array.prototype[method];
+  arrayInstrumentations[method] = function(...args) {
+    shouldTrack = false;
+
+    const res = originMethod.apply(this, args);
+
+    shouldTrack = true;
+    return res;
+  }
+})
+
+
+function track(target, key) {
+  if (!activeEffectFn || !shouldTrack) return;
+}
+```
+
+当然，其它的方法也同样处理
