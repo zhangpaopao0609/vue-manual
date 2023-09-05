@@ -158,3 +158,125 @@ if(!isReadonly && typeof key !== SYMBOL_TYPE) {
   track(target, key);
 }
 ```
+
+## 5.7.3 数组查找
+
+```js
+const p = reactive([0, 1, 2, 3]);
+
+effect(() => {
+  console.log(p.includes(1));
+})
+
+setTimeout(() => {
+  p[1] = 2;
+}, 1000);
+```
+
+当通过 includes 查找时，背后会触发 length 和 各索引的读取，如下：
+
+```js
+Map(1) {
+  [ 0, 1, 2, 3 ] => Map(4) {
+    'includes' => Set(1) { [Function] },
+    'length' => Set(1) { [Function] },
+    '0' => Set(1) { [Function] },
+    '1' => Set(1) { [Function] }
+  }
+}
+```
+
+所以，当修改 p[1] 时，就会触发 `'1' => Set(1) { [Function] }`，所以自然就能够响应了
+
+但 includes 并不总是按照预期工作：
+
+```js
+const obj = {}
+
+const p = reactive([obj]);
+
+effect(() => {
+  console.log(p.includes(p[0]));
+})
+```
+
+这，第一眼感觉是没问题的：true，但这里打印的结果是 false。为啥呢？
+
+来，我们来看
+- p[0] 是什么呢？p 是一个代理对象，所以获取 p[0] 是通过 proxy 的 get 拦截函数获取的，因为 p[0] 是个啥呢？是个对象是吧，所以 p[0] 得到的是一个代理对象
+  ```js
+  if (typeof res === 'object' && res !== null) {
+    return isReadonly ? readonly(res) : reactive(res)
+  }
+  ```
+- includes 内部同样会通过索引来获取值（this value），所以这里也会通过 proxy 的 get 拦截函数获取，最终得到的又是一个代理对象。
+
+你可能会说，那应该相等呀，乖乖，仔细想想，这是两个完全不同的代理对象呀，所以肯定是不一样的。
+
+那么有什么办法可以解决呢？上面两个代理对象虽然不一样，但是，他们所代理的对象（即 target）是一样的，那么是不是能够利用一下呢？嗯，对的，可以将 target 和 target 所对应的代理对象做一个映射，如果这个 target 已经有代理对象了，那么直接取，否者就走正常的代理，同时将其存起来。
+
+```js
+// 定义一个 map 实例，存储原始对象到代理对代理对应的映射
+const reactiveMap = new Map();
+
+function reactive(obj) {
+  // 优先查找原始对象之前创建的代理对象
+  const existionProxy = reactiveMap.get(obj);
+  if(existionProxy) return existionProxy;
+  // 否者正常创建
+  const res = createReactive(obj, false);
+  // 存储
+  reactiveMap.set(obj, res);
+  return res;
+}
+```
+
+那现在完美了吗？
+没有哟，再来看：
+
+```js
+const obj = {}
+
+const p = reactive([obj]);
+
+effect(() => {
+  console.log(p.includes(obj));
+})
+```
+
+这好像很合理的一个判断逻辑，可结果确实不对的哟，因为 includes 得到的是代理对象，obj 确实原始对象，自然永远都是 false。
+
+那怎么办呢？很简单，我们重写 include 方法就好了
+
+```js
+const arrayInstrumentations = {
+  includes: function(...args) {
+    // 数组的原始方法
+    const originMethod = Array.prototype.includes;
+    // this 指向的是 receiver，即代理对象
+    let res = originMethod.apply(this, args);
+    // 如果代理对象上没查找到
+    if(res === false) {
+      // 那么就在原始对象上查找一次
+      res = originMethod.apply(this[RAW_KEY], args);
+    }
+    return res;
+  }
+}
+
+
+funciton createReactive() {
+  proxy(target, {
+    get() {
+      ...
+      if(Array.isArray(target) && Object.prototype.hasOwnProperty.call(arrayInstrumentations, key)) {
+        return Reflect.get(arrayInstrumentations, key, receiver);
+      }
+      ...
+    }
+  })
+}
+```
+
+当然，除了 includes，还有其它的查找方法也是一致的，indexOf，lastIndexOf
+
