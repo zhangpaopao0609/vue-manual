@@ -177,3 +177,39 @@ setTimeout(() => {
 ```
 
 > 其实需要好好想想，为什么原始数据上不能存在响应式数据。因为如果原始数据上存在响应式数据了，那么岂不是混乱了吗？响应式可以响应，非响应式也可以响应。
+
+## 5.8.4 处理 forEach
+
+forEach 也非常简单，直接拦截 forEach 方法即可。
+只是需要注意两点
+1. `forEach((v, k) => void, thisArg)` 其中 v 和 k 都需要再次响应式化
+
+   ```js
+     forEach(callback, thisArg) {
+       const target = this[RAW_KEY];
+       const wrap = (v) => isObjectNotNull(v) ? reactive(v) : v
+       target.forEach((v, k) => {
+         callback.call(thisArg, wrap(v), wrap(k), this);
+       })
+       track(target, ITERATE_KEY)
+     }
+   ```
+
+2. map 的 set 方法，当触发 trigger 时，也需要执行 ITERATE_KEY 收集的副作用函数
+
+   ```js
+     if(
+       type === TriggerType.ADD 
+       || type === TriggerType.DELETE
+       || (type === TriggerType.SET && isMap(target))
+     ) {
+       const iterateEffects = targetMap.get(ITERATE_KEY);
+       iterateEffects && iterateEffects.forEach(fn => {
+         if (fn !== activeEffectFn) {
+           keySetToRun.add(fn)
+         }
+       });
+     }
+   ```
+
+   
