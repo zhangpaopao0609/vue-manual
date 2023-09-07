@@ -152,3 +152,28 @@ function creatReactive(obj) {
   })
 }
 ```
+
+## 5.3 避免污染原始数据
+
+这个例子清晰地讲了什么是污染原始数据。
+
+```js
+// 原始数据对象
+const m = new Map();
+// 代理对象
+const p1 = reactive(m);
+// 代理对象
+const p2 = reactive(new Map());
+// 设置
+p1.set('p2', p2);
+
+effect(() => {
+  console.log(m.get('p2').size);
+});
+
+setTimeout(() => {
+  m.get('p2').set('foo', 1)
+}, 1000);
+```
+
+> 其实需要好好想想，为什么原始数据上不能存在响应式数据。因为如果原始数据上存在响应式数据了，那么岂不是混乱了吗？响应式可以响应，非响应式也可以响应。
