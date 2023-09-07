@@ -68,3 +68,25 @@ if(isSet(target) && key === SIZE_KEY) {
 > 那这里的 this 指向改成 target 本身会有问题吗？
 >
 > 答案是肯定的，不会！因为这里限定了 size 属性，size 属性是一个内部的属性，它不会受到用户的影响，所以上面那种因为 this 指向了对象的一个值而未被成功收集的情况是不会发生的。
+
+size 解决了，我们再来看看 delete。
+
+```js
+const s = new Set([1, 2, 3]);
+const p = reactive(s);
+
+p.delete(1);
+```
+
+按照 size 的思路，是不是会想到，我修改 `return Reflect.get(target, key, target);` 就可以了呀，不行的，为什么呢？因为 p.delete() 函数执行时，因为 this 隐式绑定的规则，所以delete 方法在执行时，它的 this 永远执行的都是 p，也就是代理对象，很显然，代理对象上肯定是没有 delete 方法的，那么我们怎么做呢？很简单，我们拦截 delete 方法，然后手动指定 this 就可以了。
+
+```js
+if(isSet(target) || isMap(target)) {
+  if(key === SIZE_KEY) {
+    return Reflect.get(target, key, target);
+  }
+  return target[key].bind(target)
+};
+```
+
+这样写不会出问题吗？不会的，因为 map 和 set 除了 size，其它全部都是方法，所以不用担心。

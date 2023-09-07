@@ -147,6 +147,12 @@ function isMap(obj) {
   return Object.prototype.toString.call(obj) === '[object Map]'
 }
 
+const setInstrumentations = {
+  delete() {
+    
+  }
+}
+
 // 将 obj 设置为响应式对象
 function createReactive(obj, isShallow = false, isReadonly = false) {
   return new Proxy(obj, {
@@ -157,8 +163,11 @@ function createReactive(obj, isShallow = false, isReadonly = false) {
       if(isArray(target) && Object.prototype.hasOwnProperty.call(arrayInstrumentations, key)) {
         return Reflect.get(arrayInstrumentations, key, receiver);
       };
-      if(isSet(target) && key === SIZE_KEY) {
-        return Reflect.get(target, key, target);
+      if(isSet(target) || isMap(target)) {
+        if(key === SIZE_KEY) {
+          return Reflect.get(target, key, target);
+        }
+        return target[key].bind(target)
       };
       if(!isReadonly && typeof key !== SYMBOL_TYPE) {
         track(target, key);
@@ -334,4 +343,11 @@ function watch(source, cb, options = {}) {
 const s = new Set([1, 2, 3]);
 const p = reactive(s);
 
-console.log(p.size);
+
+// effect(() => {
+//   console.log(p.size);
+// })
+
+setTimeout(() => {
+  p.delete(1);
+}, 1000);
