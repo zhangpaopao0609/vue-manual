@@ -147,10 +147,27 @@ function isMap(obj) {
   return Object.prototype.toString.call(obj) === '[object Map]'
 }
 
-const setInstrumentations = {
-  delete() {
-    
-  }
+const mutableInstrumentations = {
+  add(val) {
+    // 函数调用时，this 指向的是原始数据对象（因为 bind 了）
+    // 先判断是否有这个值
+    const hasVal = this.has(val);
+    // 原始数据对象上执行方法
+    const res = this.add(val);
+    // 如果没有这个值，才触发副作用函数
+    if(!hasVal) {
+      trigger(this, val, TriggerType.ADD)
+    }
+    return res;
+  },
+  delete(val) {
+    const hasVal = this.has(val);
+    const res = this.delete(val);
+    if(hasVal) {
+      trigger(this, val, TriggerType.DELETE)
+    }
+    return res;
+  },
 }
 
 // 将 obj 设置为响应式对象
@@ -165,9 +182,10 @@ function createReactive(obj, isShallow = false, isReadonly = false) {
       };
       if(isSet(target) || isMap(target)) {
         if(key === SIZE_KEY) {
+          track(target, ITERATE_KEY);
           return Reflect.get(target, key, target);
         }
-        return target[key].bind(target)
+        return mutableInstrumentations[key].bind(target);
       };
       if(!isReadonly && typeof key !== SYMBOL_TYPE) {
         track(target, key);
@@ -343,4 +361,14 @@ function watch(source, cb, options = {}) {
 const s = new Set([1, 2, 3]);
 const p = reactive(s);
 
-p.delete(1);
+effect(() => {
+  console.log(p.size);
+})
+
+setTimeout(() => {
+  p.delete(1)
+}, 1000);
+
+setTimeout(() => {
+  p.add(1)
+}, 2000);

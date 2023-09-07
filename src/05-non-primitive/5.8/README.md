@@ -90,3 +90,65 @@ if(isSet(target) || isMap(target)) {
 ```
 
 这样写不会出问题吗？不会的，因为 map 和 set 除了 size，其它全部都是方法，所以不用担心。
+
+## 5.8.2 建立响应联系
+
+```js
+const s = new Set([1, 2, 3]);
+const p = reactive(s);
+
+effect(() => {
+  console.log(p.size);
+})
+
+setTimeout(() => {
+  p.delete(1)
+}, 1000);
+
+setTimeout(() => {
+  p.add(1)
+}, 2000);
+```
+
+在触发 size 的时候，应该主动收集起来，当触发 delete 和 add 时，应该主动触发 size 收集的副作用函数。
+
+```js
+const mutableInstrumentations = {
+  add(val) {
+    // 函数调用时，this 指向的是原始数据对象（因为 bind 了）
+    // 先判断是否有这个值
+    const hasVal = this.has(val);
+    // 原始数据对象上执行方法
+    const res = this.add(val);
+    // 如果没有这个值，才触发副作用函数
+    if(!hasVal) {
+      trigger(this, val, TriggerType.ADD)
+    }
+    return res;
+  },
+  delete(val) {
+    const hasVal = this.has(val);
+    const res = this.delete(val);
+    if(hasVal) {
+      trigger(this, val, TriggerType.DELETE)
+    }
+    return res;
+  },
+}
+
+function creatReactive(obj) {
+  return new Proxy(obj, {
+    get(targe, key, receiver) {
+      ...
+      if(isSet(target) || isMap(target)) {
+        if(key === SIZE_KEY) {
+          track(target, ITERATE_KEY);
+          return Reflect.get(target, key, target);
+        }
+        return mutableInstrumentations[key].bind(target);
+      };
+      ...
+    }
+  })
+}
+```
