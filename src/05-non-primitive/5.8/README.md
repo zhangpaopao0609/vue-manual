@@ -213,3 +213,68 @@ forEach 也非常简单，直接拦截 forEach 方法即可。
    ```
 
    
+## 5.8.5 迭代器方法
+
+`for of` 循环和 `entries` 方法
+
+- 可迭代协议：一个对象实现了 `Symbol.iteration` 方法
+- 迭代器协议：一个对象实现了 `next` 方法
+
+```js
+const m = new Map([
+  ['key1', 'value1'],
+  ['key2', 'value2'],
+]);
+
+const p = reactive(m);
+
+effect(() => {
+  for (const [key, value] of p) {
+    console.log(key, value);
+  }
+})
+
+effect(() => {
+  for (const [key, value] of p.entries()) {
+    console.log(key, value);
+  }
+})
+
+setTimeout(() => {
+  p.set('key3', 'value3')
+}, 1000);
+
+setTimeout(() => {
+  p.delete('key1')
+}, 2000);
+```
+
+实现 set 和 map 的 可迭代协议 `Symbol.iteration`
+
+```js
+const mutableInstrumentations = {
+  [Symbol.iteration]() {
+    const target = this[RAW_KEY];
+    // 获取原始迭代方法
+    const itr = target[Symbol.iterator]();
+    const wrap = (v) => isObjectNotNull(v) ? reactive(v) : v
+    track(target, ITERATE_KEY)
+    return {
+      // 迭代器协议是指一个对象实现了 next 方法
+      next() {
+        const { value, done} = itr.next();
+        return {
+          value: value ? [wrap(value[0]), wrap(value[1])] : value,
+          done
+        }
+      },
+      // 可迭代协议是指一个对象实现了 Symbol.iterator
+      [Symbol.iterator]() {
+        return this
+      }
+    }
+  }
+}
+```
+
+同时 `entries` 方法也是相同的实现。
