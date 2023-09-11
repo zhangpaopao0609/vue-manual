@@ -278,3 +278,44 @@ const mutableInstrumentations = {
 ```
 
 同时 `entries` 方法也是相同的实现。
+
+## 5.8.6 values 和 keys 方法
+
+- `values` 方法返回一个可迭代的 value
+- `keys` 方法返回一个可迭代的 key
+
+所以做法也很简单，就是拦截这两个方法，利用原始对象的方法返回迭代器，当然，这里同样需要对返回的值做响应式处理
+
+```js
+function kvIterationMethod(name, key) {
+  const target = this[RAW_KEY];
+  const itr = target[name]();
+  track(target, key);
+  return {
+    next() {
+      const {value, done} = itr.next();
+
+      return {
+        value: wrapReactive(value),
+        done,
+      }
+    },
+    [Symbol.iterator]() {
+      return this;
+    }
+  };
+}
+
+....
+const mutableInstrumentations = {
+  values() {
+    // 这里为什么要 call 呢？
+    // 1. 这里的 this 是谁？将会是代理对象，因为 Reflect(target, key, receiver)
+    // 2. 这里 call 是因为如果不指向 this 的指向，那么 kvIterationMethod 函数在执行时，它的 this 指向的是 window
+    return kvIterationMethod.call(this, 'values', ITERATE_KEY)
+  },
+  keys() {
+    return kvIterationMethod.call(this, 'keys', MAP_KEY_ITERATE_KEY)
+  }
+}
+```
