@@ -73,6 +73,3 @@ const renderer = createRenderer({
 renderer.render(vnode, document.querySelector('#app'));
 ```
 
-## 8.2 HTML Attributes and DOM Properties
-
-HTML Attributes 的所用是设置如此对应的 DOM Properties 的初始值
