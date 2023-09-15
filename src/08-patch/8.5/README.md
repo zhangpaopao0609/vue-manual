@@ -285,3 +285,30 @@ if(key === 'class') {
 ```
 
 当然，除了 class， style 同样需要做这样的序列化。
+
+## 8.5 卸载操作
+
+直接 container.innerHTML = null 是不合适的，直接这样卸载无法实现
+- 调用卸载时组件的生命周期
+- 直接设置，绑定在 dom 上的事件不会移除
+- 指令等钩子无法触发
+
+所以，可以通过 vnode 获取真实 dom，通过真实 dom 来卸载
+
+```js
+/**
+ * 卸载操作
+ * @param {*} vnode 
+ */
+function unmountElement(vnode) {
+  // 根据 vnode 获取要卸载的真实 DOM 元素
+  const el = vnode.el;
+  // 获取真实 DOM 的父元素
+  const parent = el.parentNode;
+  if(parent) unmount(el, parent)
+}
+```
+
+这样，因为可以获取到 vnode，所以可以：
+- 执行挂载的钩子
+- 如果是组件，可以调用组件的声明周期（可以通过 vnode 的类型来判断是否为组件）
