@@ -1,4 +1,4 @@
-import { effect, ref } from "../reactivity.js";
+import { effect, shallowRef } from "../reactivity.js";
 
 function isString(str) {
   return typeof str === 'string';
@@ -12,22 +12,29 @@ function isObject(obj) {
   return Object.prototype.toString.call(obj) === '[object Object]'
 }
 
-const TEXT = Symbol();
+// 文本节点的 type 标识
+const Text = Symbol();
+// 注释节点的 type 标识
+const Comment = Symbol();
 
 function createRenderer(options) {
-  const { createElement, insert, setElementText, patchProps, unmount } = options;
+  const { 
+    createElement, 
+    insert, 
+    setElementText, 
+    patchProps, 
+    unmount, 
+    createText, 
+    setText, 
+    createComment, 
+    setComment 
+  } = options;
   /**
    * 挂载操作
    * @param {*} vnode 
    * @param {*} container 
    */
   function mountElement(vnode, container) {
-    if(!isObject(vnode)) {
-      // !todo 做一个临时的兼容
-      const el = document.createTextNode(vnode)
-      insert(el, container)
-      return
-    }
     // 让 vnode 引用真实 dom 元素
     const el = vnode.el = createElement(vnode.type);
     const props = vnode.props;
@@ -133,20 +140,46 @@ function createRenderer(options) {
       n1 = null;
     }
 
-    if(!n1) {
-      mountElement(n2, container)
-    } else {
-      // 能走到这里，说明 n1 和 n2 的类型相同，如果不相同， n1 就为 null 了
-      // 通过 n2 的类型来决定如何渲染
-      const { type } = n2;
-      if(typeof type === 'string') {
+    const { type } = n2;
+
+    // 通过 n2 的类型来决定如何渲染
+    if(typeof type === 'string') {
+      // 说明是普通标签元素
+      if(!n1) {
+        mountElement(n2, container)
+      } else {
+        // 能走到这里，说明 n1 和 n2 的类型相同，如果不相同， n1 就为 null 了
         // 说明是普通标签元素
         patchElement(n1, n2)
-      } else if(isObject(type)) {
-        // 如果 n2.type 的值的类型是对象，则描述的是组件
-      } else if(type === 'xxx') {
-        // 处理其它类型
       }
+    } else if (type === Text) {
+      // 说明是文本节点
+      if(!n1) {
+        const el = n2.el = createText(n2.children);
+        // 将文本节点插入到容器中
+        insert(el, container)
+      } else {
+        const el = n2.el = n1.el;
+        if(n2.children !== n1.children) {
+          setText(el, n2.children)
+        }
+      }
+    } else if (type === Comment) {
+      // 说明是注释节点
+      if(!n1) {
+        const el = n2.el = createComment(n2.children);
+        // 将注释节点插入到容器中
+        insert(el, container)
+      } else {
+        const el = n2.el = n1.el;
+        if(n2.children !== n1.children) {
+          setComment(el, n2.children)
+        }
+      }
+    } else if(isObject(type)) {
+      // 如果 n2.type 的值的类型是对象，则描述的是组件
+    } else if(type === 'xxx') {
+      // 处理其它类型
     }
   }
   /**
@@ -219,6 +252,18 @@ const renderer = createRenderer({
    */
   setElementText(el, text) {
     el.textContent = text
+  },
+  createText(text) {
+    return document.createTextNode(text);
+  },
+  setText(el, text) {
+    el.nodeValue = text;
+  },
+  createComment(comment) {
+    return document.createComment(comment);
+  },
+  setComment(el, comment) {
+    el.nodeValue = comment;
   },
   /**
    * 在给定的 parent 下添加指定元素
@@ -297,7 +342,7 @@ const renderer = createRenderer({
   }
 });
 
-const vnode = ref({
+const vnode = shallowRef({
   type: "div",
   props: {
     class: 'foo',
@@ -307,8 +352,6 @@ const vnode = ref({
   },
   children: 'some text'
 })
-
-// renderer.render(vnode, document.querySelector('#app'));
 
 effect(() => {
   renderer.render(vnode.value, document.querySelector('#app'));
@@ -324,7 +367,10 @@ setTimeout(() => {
       }
     },
     children: [
-      'title',
+      {
+        type: Text,
+        children: 'title'
+      },
       {
         type: "span",
         props: {

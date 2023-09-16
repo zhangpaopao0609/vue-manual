@@ -523,3 +523,42 @@ const vnode3 = {
 ```
 
 旧子节点对应这三种情况，同样的，新的子节点也同样逃不过这三种类型。那么，我们在更新子节点的时候，也就是这 9 种情况。但实际上是不需要判断 9 种的，这里来实现以下。
+
+分别针对不同类型做不同处理即可
+
+```js
+function patchChildren(n1, n2, container) {
+  const oldChildren = n1.children;
+  const newChildren = n2.children;
+
+  if (isString(newChildren)) {
+    // 如果新子节点是文本
+    // 那么如果旧子节点是 空 或者 文本，都不用处理，直接设置 container 的文本为新子节点即可，所以只需要处理旧子节点为数组的情况
+
+    if(isArray(oldChildren)) {
+      // 旧子节点为数组，那么全部卸载即可
+      oldChildren.forEach(child => unmountElement(child))
+    } 
+    setElementText(container, newChildren)
+  } else if (isArray(newChildren)) {
+    // 如果新子节点是数组
+    // 那么如果旧子节点是 空，就不用处理，如果为 文本，可以直接将文本清空，然后挂载新子节点，所以仍旧只需要处理旧子节点为数组的情况
+    if(isArray(oldChildren)) {
+      // 旧子节点为数组
+      // 这里就涉及到 diff 算法了，不过可以先简单处理一下，怎么处理呢，很简单，先卸载旧的，再挂载新的，不过这样就毫无性能提升了，但这里先这样简单做就好了
+      oldChildren.forEach(child => unmountElement(child));
+    } else if (isString(oldChildren)) {
+      setElementText(container, '');
+    } 
+    newChildren.forEach(child => patch(null, child, container));
+  } else {
+    // 如果新子节点为空
+    // 那么只需要处理旧子节点为数组的情况
+    if(isArray(oldChildren)) {
+      // 旧子节点为数组，全部卸载
+      oldChildren.forEach(child => unmountElement(child));
+    } 
+    setElementText(container, '');
+  }
+}
+```

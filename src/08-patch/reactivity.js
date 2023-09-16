@@ -13,7 +13,7 @@ const TriggerType = {
   ADD: 'ADD',
   DELETE: 'DELETE'
 }
-const RAW_KEY = Symbol();
+export const RAW_KEY = Symbol();
 const LENGTH_KEY = 'length';
 const SYMBOL_TYPE = 'symbol';
 const SIZE_KEY = 'size';
@@ -400,6 +400,19 @@ export function ref(val) {
   });
 
   return reactive(wrapper);
+}
+
+export function shallowRef(val) {
+  const wrapper = {
+    value: val,
+  }
+
+  // 属性默认不可写，不可枚举，用它来判读对象是否是 ref
+  Object.defineProperty(wrapper, REF_INNER_KEY, {
+    value: true,
+  });
+
+  return shallowReactive(wrapper);
 }
 
 export function toRef(obj, key) {
