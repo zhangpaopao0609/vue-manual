@@ -1,0 +1,77 @@
+# 9 简单 diff 算法
+
+## 9.1 减少 DOM 操作的性能开销
+
+新旧子节点均为数组时，可以进行比对，先用最小的那个数组长度来循环，然后如果新的更短，那么说明旧子节点要卸载，如果旧的更短，那么说明新子节点要挂载
+
+```js
+// 旧子节点为数组
+// 简单 diff 算法
+const oldLen = oldChildren.length;
+const newLen = newChildren.length;
+const commonLen = Math.min(oldLen, newLen);
+// 先 diff 共同的长度
+for (let i = 0; i < commonLen; i++) {
+  patch(oldChildren[i], newChildren[i], container)
+}
+
+if(oldLen < newLen) {
+  // 新子节点更多，那么直接挂载
+  for (let i = commonLen; i < newLen; i++) {
+    patch(null, newChildren[i], container)
+  }
+} else if(newLen < oldLen){
+  // 旧子节点更多，那么直接卸载
+  for (let i = commonLen; i < oldLen; i++) {
+    unmountElement(oldChildren[i])
+  }
+}
+```
+
+## 9.2 DOM 复用与 key 的作用
+
+直接按照上面的比对，其实还有很大的优化空间。
+
+```js
+const oldVNode = {
+  type: "div",
+  children: [
+    { type: 'div', children: '1' },
+    { type: 'p', children: '2' },
+    { type: 'span', children: '3' },
+  ]
+}
+
+const newVNode = {
+  type: "div",
+  children: [
+    { type: 'span', children: '3' },
+    { type: 'div', children: '1' },
+    { type: 'p', children: '2' },
+  ]
+}
+```
+
+可以看到，子节点其实只是发生了移动，如果按照上述的更新，那么会进行 6 次 DOM 的操作，3 次卸载 3 次挂载。
+但我们知道，这仅仅只发生了移动，所以我们可以试着比对一下是否有相同的元素，如果有，直接移动就好了。
+那么怎么比对呢？单单用 type 肯定是不行的，因为 type 并不是唯一值，那么用什么呢？就需要用一个唯一标识符了，也就是 key
+
+```js
+const oldVNode = {
+  type: "div",
+  children: [
+    { type: 'p', children: '1', key: 1 },
+    { type: 'p', children: '2', key: 2 },
+    { type: 'p', children: '3', key: 3 },
+  ]
+}
+
+const newVNode = {
+  type: "div",
+  children: [
+    { type: 'p', children: '3', key: 3 },
+    { type: 'p', children: '1', key: 1 },
+    { type: 'p', children: '2', key: 2 },
+  ]
+}
+```
