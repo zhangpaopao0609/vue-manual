@@ -159,3 +159,117 @@ function mountComponent(vnode, container, anchor) {
 }
 ```
 但这样还是有些许缺陷的，因为每次 patch 的时候都是 null，相当于说每次都是新的挂载，而不是打补丁，这是不正确的。正确的做法是，每次更新时，都拿新的 subTree 与上一次组件所渲染的 subTree 进行打补丁。为此，我们需要实现组件实例，用它来维护组件的整个生命周期的状态，这行渲染器才能够在正确的时机执行合适的操作。
+
+## 12.3 组件实例与组件的生命周期
+组件实例本质就是状态集合，维护着组件运行过程中的所有信息。
+
+```js
+function mountComponent(vnode, container, anchor) {
+  // 通过 vnode 获取组件的选项对象，即 vnode.type
+  const componentOptions = vnode.type;
+  // 获取组件的渲染函数 render
+  const { render, data } = componentOptions;
+  // 调用 data 函数得到原始数据，并调用 reactive 函数将其包装为响应式数据
+  const state = reactive(data());
+
+  // 定义组件实例，一个组件实例本质上就是一个对象，它包含与组件有关的状态信息
+  const instance = {
+    // 逐渐吱声的状态数据，即 data
+    state,
+    // 一个布尔值，用来表示组件是否已经被挂载，初始值为 false
+    isMounted: false,
+    // 组件所渲染的内容，即子树
+    subTree: null,
+  };
+
+  // 将组件实例设置到 vnode 上，这样后续就可以用它来进行更新了
+  vnode.component = instance;
+
+  const queueJob = getQueueJob();
+  // 将组件的 render 函数调用包装到  effect 内
+  effect(() => {
+    // 执行渲染函数，获取组件要渲染的内容，即 render 函数返回的 vnode，同时指定 this
+    // 从而 render 函数内部就可以通过 this 访问组件自身状态数据
+    const subTree = render.call(state, state);
+    // 检查组件是否已经被挂载
+    if(!instance.isMounted) {
+      // 初次挂载，调用 patch 函数第一个参数为 null
+      patch(null, subTree, container, anchor);
+      // 重点，将组件实例的 isMounted 设置为 true，这样当更新发生时就不会再次进行挂载操作
+      // 而是会执行更新操作
+      instance.isMounted = true;
+    } else {
+      // 当 isMounted 为 true 时，说明组件已经被挂载，只需要完成自更新即可
+      // 所以在调用 patch 函数是，第一个参数为组件上一次渲染的子树
+      // 意思是，使用新的子树与上一次渲染的子树进行打补丁操作
+      patch(instance.subTree, subTree, container, anchor)
+    }
+    // 更新组件实例的子树
+    instance.subTree = subTree;
+  }, { scheduler: queueJob })
+}
+```
+
+生命周期也是一样的，我们只需要在合适的时机调用对应的钩子即可，这里只需要注意调用时机即可
+
+```js
+function mountComponent(vnode, container, anchor) {
+  // 通过 vnode 获取组件的选项对象，即 vnode.type
+  const componentOptions = vnode.type;
+  // 获取组件的渲染函数 render
+  const { render, data, beforeCreate, created, beforeMount, mounted, beforeUpdate, updated } = componentOptions;
+
+  // 在这里调用 beforeCreate
+  beforeCreate && beforeCreate();
+
+  // 调用 data 函数得到原始数据，并调用 reactive 函数将其包装为响应式数据
+  const state = reactive(data());
+
+  // 定义组件实例，一个组件实例本质上就是一个对象，它包含与组件有关的状态信息
+  const instance = {
+    // 逐渐吱声的状态数据，即 data
+    state,
+    // 一个布尔值，用来表示组件是否已经被挂载，初始值为 false
+    isMounted: false,
+    // 组件所渲染的内容，即子树
+    subTree: null,
+  };
+
+  // 将组件实例设置到 vnode 上，这样后续就可以用它来进行更新了
+  vnode.component = instance;
+  
+  // 在这里调用 created
+  created && created();
+
+  const queueJob = getQueueJob();
+  // 将组件的 render 函数调用包装到  effect 内
+  effect(() => {
+    // 执行渲染函数，获取组件要渲染的内容，即 render 函数返回的 vnode，同时指定 this
+    // 从而 render 函数内部就可以通过 this 访问组件自身状态数据
+    const subTree = render.call(state, state);
+    // 检查组件是否已经被挂载
+    if(!instance.isMounted) {
+      // 在这里调用 beforeMount
+      beforeMount && beforeMount();
+      // 初次挂载，调用 patch 函数第一个参数为 null
+      patch(null, subTree, container, anchor);
+      // 在这里调用 mounted
+      mounted && mounted();
+      // 重点，将组件实例的 isMounted 设置为 true，这样当更新发生时就不会再次进行挂载操作
+      // 而是会执行更新操作
+      instance.isMounted = true;
+    } else {
+      // 在这里调用 beforeUpdate
+      beforeUpdate && beforeUpdate();
+      // 当 isMounted 为 true 时，说明组件已经被挂载，只需要完成自更新即可
+      // 所以在调用 patch 函数是，第一个参数为组件上一次渲染的子树
+      // 意思是，使用新的子树与上一次渲染的子树进行打补丁操作
+      patch(instance.subTree, subTree, container, anchor);
+      // 在这里调用 updated
+      updated && updated();
+    }
+    // 更新组件实例的子树
+    instance.subTree = subTree;
+  }, { scheduler: queueJob })
+}
+```
