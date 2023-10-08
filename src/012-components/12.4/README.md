@@ -507,3 +507,81 @@ function patchComponent(n1, n2, anchor) {
   }
 }
 ```
+
+这里实现 props 的处理，但还没有处理 attrs 与 slots 的更新。attrs 和 props 类似。
+
+由于 props 数据与组件自身的状态数据都需要暴露到渲染函数中，并使得渲染函数能够通过 this 访问，因此需要封装一个渲染上下文对象，这样才能通过 this 访问。
+通过 proxy 创建完成后，再在各自方法调用时指向即可。
+- 组件的 render 函数
+- 组件的 method、生命周期函数
+
+```js
+/**
+ * 挂载组件
+ * @param {*} vnode 
+ * @param {*} container 
+ * @param {*} anchor 
+ */
+function mountComponent(vnode, container, anchor) {
+  // ....
+  // 将组件实例设置到 vnode 上，这样后续就可以用它来进行更新了
+  vnode.component = instance;
+  
+  const renderContext = new Proxy(instance, {
+    get(target, key, receiver) {
+      const { state, props } = target;
+      if(state && key in state) {
+        return state[key]
+      } else if(key in props) {
+        return props[key]
+      } else {
+        console.error('not exist')
+      }
+    },
+    set(target, key, newVal, receiver) {
+      const { state, props } = target;
+      if(state && key in state) {
+        state[key] = newVal;
+        return true;
+      } else if(key in props) {
+        console.warn(`Attempting to mutate prop "${key}". Props are readonly.`)
+      } else {
+        console.error('not exist')
+      }
+    }
+  })
+  // 在这里调用 created
+  created && created.call(renderContext);
+
+  const queueJob = getQueueJob();
+  // 将组件的 render 函数调用包装到  effect 内
+  effect(() => {
+    // 执行渲染函数，获取组件要渲染的内容，即 render 函数返回的 vnode，同时指定 this
+    // 从而 render 函数内部就可以通过 this 访问组件自身状态数据
+    const subTree = render.call(renderContext, renderContext);
+    // 检查组件是否已经被挂载
+    if(!instance.isMounted) {
+      // 在这里调用 beforeMount
+      beforeMount && beforeMount.call(renderContext);
+      // 初次挂载，调用 patch 函数第一个参数为 null
+      patch(null, subTree, container, anchor);
+      // 在这里调用 mounted
+      mounted && mounted.call(renderContext);
+      // 重点，将组件实例的 isMounted 设置为 true，这样当更新发生时就不会再次进行挂载操作
+      // 而是会执行更新操作
+      instance.isMounted = true;
+    } else {
+      // 在这里调用 beforeUpdate
+      beforeUpdate && beforeUpdate.call(renderContext);
+      // 当 isMounted 为 true 时，说明组件已经被挂载，只需要完成自更新即可
+      // 所以在调用 patch 函数是，第一个参数为组件上一次渲染的子树
+      // 意思是，使用新的子树与上一次渲染的子树进行打补丁操作
+      patch(instance.subTree, subTree, container, anchor);
+      // 在这里调用 updated
+      updated && updated.call(renderContext);
+    }
+    // 更新组件实例的子树
+    instance.subTree = subTree;
+  }, { scheduler: queueJob })
+}
+```

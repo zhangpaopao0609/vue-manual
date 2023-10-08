@@ -1,5 +1,5 @@
 import LIS from "./longest-increasing-subsquence.js";
-import { reactive, effect, shallowReactive } from "../reactivity.js";
+import { reactive, effect, shallowReactive, ref } from "../reactivity.js";
 
 function isString(str) {
   return typeof str === 'string';
@@ -84,25 +84,28 @@ function createRenderer(options) {
     const oldChildren = n1.children;
     const newChildren = n2.children;
 
+    const l1 = oldChildren.length;
+    const l2 = newChildren.length;
+
     let j = 0;
     let oldVNode = oldChildren[j];
     let newVNode = newChildren[j];
-
+    
     // 相同的前置节点
-    while(oldVNode.key === newVNode.key) {
+    while(j < l1 && j < l2 && oldVNode.key === newVNode.key) {
       patch(oldVNode, newVNode, container)
       j++;
       oldVNode = oldChildren[j];
       newVNode = newChildren[j];
     }
 
-    let oldEndIdx = oldChildren.length - 1;
-    let newEndIdx = newChildren.length - 1;
+    let oldEndIdx = l1 - 1;
+    let newEndIdx = l2 - 1;
     oldVNode = oldChildren[oldEndIdx];
     newVNode = newChildren[newEndIdx];
 
     // 相同的后置节点
-    while(oldVNode.key === newVNode.key) {
+    while(j <= oldEndIdx && j <= newEndIdx && oldVNode.key === newVNode.key) {
       patch(oldVNode, newVNode, container)
       oldEndIdx--;
       newEndIdx--;
@@ -290,7 +293,7 @@ function createRenderer(options) {
    * @param {*} propsData 组件传递的 props
    * @returns [组件的 props，attrs]
    */
-  function resolveProps(options, propsData) {
+  function resolveProps(options = {}, propsData = {}) {
     const props = {};
     const attrs = {};
 
@@ -342,35 +345,58 @@ function createRenderer(options) {
     // 将组件实例设置到 vnode 上，这样后续就可以用它来进行更新了
     vnode.component = instance;
     
+    const renderContext = new Proxy(instance, {
+      get(target, key, receiver) {
+        const { state, props } = target;
+        if(state && key in state) {
+          return state[key]
+        } else if(key in props) {
+          return props[key]
+        } else {
+          console.error('not exist')
+        }
+      },
+      set(target, key, newVal, receiver) {
+        const { state, props } = target;
+        if(state && key in state) {
+          state[key] = newVal;
+          return true;
+        } else if(key in props) {
+          console.warn(`Attempting to mutate prop "${key}". Props are readonly.`)
+        } else {
+          console.error('not exist')
+        }
+      }
+    })
     // 在这里调用 created
-    created && created();
+    created && created.call(renderContext);
 
     const queueJob = getQueueJob();
     // 将组件的 render 函数调用包装到  effect 内
     effect(() => {
       // 执行渲染函数，获取组件要渲染的内容，即 render 函数返回的 vnode，同时指定 this
       // 从而 render 函数内部就可以通过 this 访问组件自身状态数据
-      const subTree = render.call(state, state);
+      const subTree = render.call(renderContext, renderContext);
       // 检查组件是否已经被挂载
       if(!instance.isMounted) {
         // 在这里调用 beforeMount
-        beforeMount && beforeMount();
+        beforeMount && beforeMount.call(renderContext);
         // 初次挂载，调用 patch 函数第一个参数为 null
         patch(null, subTree, container, anchor);
         // 在这里调用 mounted
-        mounted && mounted();
+        mounted && mounted.call(renderContext);
         // 重点，将组件实例的 isMounted 设置为 true，这样当更新发生时就不会再次进行挂载操作
         // 而是会执行更新操作
         instance.isMounted = true;
       } else {
         // 在这里调用 beforeUpdate
-        beforeUpdate && beforeUpdate();
+        beforeUpdate && beforeUpdate.call(renderContext);
         // 当 isMounted 为 true 时，说明组件已经被挂载，只需要完成自更新即可
         // 所以在调用 patch 函数是，第一个参数为组件上一次渲染的子树
         // 意思是，使用新的子树与上一次渲染的子树进行打补丁操作
         patch(instance.subTree, subTree, container, anchor);
         // 在这里调用 updated
-        updated && updated();
+        updated && updated.call(renderContext);
       }
       // 更新组件实例的子树
       instance.subTree = subTree;
@@ -488,7 +514,7 @@ function createRenderer(options) {
       if(!n1) {
         mountComponent(n2, container, anchor)
       } else {
-        patchComponent(n1, n2, anchor)
+        patchComponent(n1, n2, anchor);
       }
     } else if(type === 'xxx') {
       // 处理其它类型
@@ -656,29 +682,54 @@ const renderer = createRenderer({
 
 const MyComponent = {
   name: 'MyComponent',
+  props: {
+    value: 0,
+  },
   data(){
     return {
-      foo: 'hello world'
+      foo: 1
     }
   },
   render() {
     return {
       type: 'div',
-      children: `foo 的值是：${this.foo}`,
+      key: 'parent',
+      children: [
+        {
+          type: 'div',
+          key: 'children',
+          props: {
+            ff: 1,
+            onClick: () => this.foo++
+          },
+          children: [
+            {
+              type: 'p',
+              children: `foo 的值是：${this.foo}`
+            },
+            {
+              type: 'p',
+              children: `父组件传递的 props 的值是：${this.value.value}`
+            }
+          ],
+        }
+      ]
+      
     }
   }
 }
 
+const data = ref(1001)
+
 const vnode = {
   type: "div",
+  props: {
+    onClick: () => data.value++
+  },
   children: [
     { type: 'p', children: '我是 p ', key: 1 },
-    { type: MyComponent, key: 'MyComponent' }
+    { type: MyComponent, key: 'MyComponent', props: { value: data } }
   ]
 }
-
-setTimeout(() => {
-  
-}, 3000);
 
 renderer.render(vnode, document.querySelector('#app'));
