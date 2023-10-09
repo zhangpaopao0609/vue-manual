@@ -1067,9 +1067,6 @@ function createRenderer(options) {
     }, { scheduler: queueJob })
   }
 
-
-
-
   return {
     render,
     currentInstance,
