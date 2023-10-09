@@ -956,3 +956,124 @@ function mountComponent(vnode, container, anchor) {
   // ...
 }
 ```
+
+## 12.8 注册生命周期
+vue3 中，有一部分组合式 API 是用于注册生命周期钩子函数的
+- onMounted
+- onUpdated
+
+等等。
+
+```js
+import { onMounted } from 'vue';
+
+const MyComponent = {
+  setup() {
+    onMounted(() => {
+      console.log('mounted 1')
+    });
+
+    // 可以注册多个
+    onMounted(() => {
+      console.log('mounted 2')
+    })
+  }
+}
+```
+
+这里 onMounted 钩子函数没有什么特别，无非就是将 callback 收集起来，在挂载完成后执行就好。
+关键点在于，A 组件使用 onMounted 会将钩子函数注册到 A 组件上，B 组件同样使用 onMounted 是会将钩子函数注册到 B 组件上，这是怎么实现的呢？
+
+其实很简单，就是将 onMounted 收集到的 callback 放到对应组件的实例上即可，这怎么做呢？我们来看
+
+- onMounted 函数规定只能在 setup 函数中使用
+- 在 setup 函数中是不是能够获取到当前实例哇
+- 然后 setup 函数执行时 onMounted 就会执行，此时就可以将 callback 收集到当前实例上了
+- 当 onMounted 怎么知道哪一个实例呢？很简单，创建一个全局变量来存储当前实例就好了，挂载当前组件时将全局变量设置为当前实例，onMounted 就可以生效了
+- 然后 setup 函数执行完成后，将 全局变量 设置为 null
+
+```js
+function createRenderer(options) {
+  // ...
+  // 用于存储当前的组件实例
+  let currentInstance = null;
+  // ...
+  /**
+   * 设置当前实例
+   * @param {*} instance 
+   */
+  function setCurrentInstance(instance) {
+    currentInstance = instance;
+  }
+  /**
+   * 生命周期函数 —— onMounted
+   * @param {*} fn 
+   */
+  function onMounted(fn) {
+    if(currentInstance) {
+      // 将生命周期函数添加到 instance.mounted 数据中
+      currentInstance.mounted.push(fn);
+    } else {
+      console.warn('onMounted 函数只能在 setup 函数中调用')
+    }
+  }
+  /**
+   * 挂载组件
+   * @param {*} vnode 
+   * @param {*} container 
+   * @param {*} anchor 
+   */
+  function mountComponent(vnode, container, anchor) {
+    // ...
+
+    // 定义组件实例，一个组件实例本质上就是一个对象，它包含与组件有关的状态信息
+    const instance = {
+      // 组件自身的状态数据，即 data
+      state,
+      // 将解析出的 props 数据包装为 shallowReactive 并定义到组件的实例上
+      props: shallowReactive(props),
+      // 一个布尔值，用来表示组件是否已经被挂载，初始值为 false
+      isMounted: false,
+      // 组件所渲染的内容，即子树
+      subTree: null,
+      slots,
+      mounted: [],
+    };
+    // ...
+    // setupContext
+    const setupContext = { attrs, emit, slots };
+    setCurrentInstance(instance);
+    // 调用 setup 函数，将只读版本的 props 作为第一个参数传递，避免用户意外地修改 props 的值
+    // setupContext 作为第二个参数
+    const setupResult = setup(shallowReadonly(instance.props), setupContext);
+    setCurrentInstance(null);
+    // ...
+    // 将组件的 render 函数调用包装到  effect 内
+    effect(() => {
+      // ...
+      // 检查组件是否已经被挂载
+      if(!instance.isMounted) {
+        // ...
+        // 遍历 instance.mounted 并逐个执行即可
+        instance.mounted.forEach(cb => cb.call(renderContext))
+        // 重点，将组件实例的 isMounted 设置为 true，这样当更新发生时就不会再次进行挂载操作
+        // 而是会执行更新操作
+        instance.isMounted = true;
+      } else {
+        // ...
+      }
+      // 更新组件实例的子树
+      instance.subTree = subTree;
+    }, { scheduler: queueJob })
+  }
+
+
+
+
+  return {
+    render,
+    currentInstance,
+    onMounted,
+  }
+}
+```
