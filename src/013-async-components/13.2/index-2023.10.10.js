@@ -650,32 +650,52 @@ function normalizeClass(value) {
 
 /**
  * 高阶组件，定义异步组件，接收一个异步组件作为参数
- * @param {*} loader 
+ * @param {*} options 
  * @returns 返回一个组件
  */
-function defineAsyncComponent(loader) {
+function defineAsyncComponent(options) {
   // 一个变量，用于存储异步加载的组件
   let InnerComp = null;
   return {
     name: 'AsyncComponentWrapper',
     setup() {
+      if(typeof options === 'function') {
+        options = { loader: options }
+      }
+      const { loader, timeout, errorComponent } = options;
       // 是否已经加载完成
       const loaded = ref(false);
+      // 是否发生了错误，并且记录错误对象
+      const error = ref(null);
+      let timeoutTimer = null;
+
       // 执行加载器函数，返回一个 Promise 实例
       // 加载成功后，将加载成功的组件赋值给 InnerComp，并将 loaded 标记为 true
       loader().then((comp) => {
         InnerComp = comp;
         loaded.value = true;
+        clearTimeout(timeoutTimer);
       }).catch((err) => {
-
+        error.value = err;
       }).finally(() => {
 
       });
+
+      if (timeout) {
+        timeoutTimer = setTimeout(() => {
+          const e = new Error(`Async component timed out after ${timeout}ms`)
+          error.value = e;
+        }, timeout);
+      }
 
       return () => {
         if(loaded.value) {
           // 如果异步组件加载成功，则渲染该组件
           return { type: InnerComp };
+        } else if (error.value && errorComponent) {
+          // 当错误存在并且用户配置了 errorComponent 时才展示 Error 组件，同时将 error 作为 props 传递
+          // 渲染错误组件 并且把错误信息通过 props 传递给错误组件
+          return { type: errorComponent, props: { error: error.value } }
         } else {
           // 否者渲染一个占位符
           return { type: Text, children: '' }

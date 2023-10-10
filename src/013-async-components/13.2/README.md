@@ -105,3 +105,65 @@ function defineAsyncComponent(loader) {
 - defineAsyncComponent 函数本质上是一个高阶组件，它的返回值是一个包装组件
 - 包装组件会根据加载的状态来渲染内容，如果加载成功了，那么渲染组件，否者渲染一个占位符
 - 通常占位内容是一个注释节点。组件没有别加载成功时，页面会渲染一个注释节点来占位。但这里我们使用了一个空文本节点来占位。
+
+### 13.2.2 超时与 Error 组件
+异步组件通常以网络请求的形式进行加载。前端发起一个 HTTP 请求，获取 js 资源。既然存在网络请求，那么必然考虑网络情况，尤其在弱网环境下，加载一个组件可能需要很长时间，因为，需要为用户提供指定超时的能力，当加载组件的事件超过了指定时长后，会触发超时错误，同时，如果用户还配置了 Error 组件，那么便会渲染该 Error 组件。
+
+```js
+/**
+ * 高阶组件，定义异步组件，接收一个异步组件作为参数
+ * @param {*} options 
+ * @returns 返回一个组件
+ */
+function defineAsyncComponent(options) {
+  // 一个变量，用于存储异步加载的组件
+  let InnerComp = null;
+  return {
+    name: 'AsyncComponentWrapper',
+    setup() {
+      if(typeof options === 'function') {
+        options = { loader: options }
+      }
+      const { loader, timeout, errorComponent } = options;
+      // 是否已经加载完成
+      const loaded = ref(false);
+      // 是否发生了错误，并且记录错误对象
+      const error = ref(null);
+      let timeoutTimer = null;
+
+      // 执行加载器函数，返回一个 Promise 实例
+      // 加载成功后，将加载成功的组件赋值给 InnerComp，并将 loaded 标记为 true
+      loader().then((comp) => {
+        InnerComp = comp;
+        loaded.value = true;
+        clearTimeout(timeoutTimer);
+      }).catch((err) => {
+        error.value = err;
+      }).finally(() => {
+
+      });
+
+      if (timeout) {
+        timeoutTimer = setTimeout(() => {
+          const e = new Error(`Async component timed out after ${timeout}ms`)
+          error.value = e;
+        }, timeout);
+      }
+
+      return () => {
+        if(loaded.value) {
+          // 如果异步组件加载成功，则渲染该组件
+          return { type: InnerComp };
+        } else if (error.value && errorComponent) {
+          // 当错误存在并且用户配置了 errorComponent 时才展示 Error 组件，同时将 error 作为 props 传递
+          // 渲染错误组件 并且把错误信息通过 props 传递给错误组件
+          return { type: errorComponent, props: { error: error.value } }
+        } else {
+          // 否者渲染一个占位符
+          return { type: Text, children: '' }
+        }
+      }
+    }
+  }
+}
+```
