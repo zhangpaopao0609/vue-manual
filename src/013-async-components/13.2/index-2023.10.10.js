@@ -648,6 +648,43 @@ function normalizeClass(value) {
   return res.trim()
 }
 
+/**
+ * 高阶组件，定义异步组件，接收一个异步组件作为参数
+ * @param {*} loader 
+ * @returns 返回一个组件
+ */
+function defineAsyncComponent(loader) {
+  // 一个变量，用于存储异步加载的组件
+  let InnerComp = null;
+  return {
+    name: 'AsyncComponentWrapper',
+    setup() {
+      // 是否已经加载完成
+      const loaded = ref(false);
+      // 执行加载器函数，返回一个 Promise 实例
+      // 加载成功后，将加载成功的组件赋值给 InnerComp，并将 loaded 标记为 true
+      loader().then((comp) => {
+        InnerComp = comp;
+        loaded.value = true;
+      }).catch((err) => {
+
+      }).finally(() => {
+
+      });
+
+      return () => {
+        if(loaded.value) {
+          // 如果异步组件加载成功，则渲染该组件
+          return { type: InnerComp };
+        } else {
+          // 否者渲染一个占位符
+          return { type: Text, children: '' }
+        }
+      }
+    }
+  }
+}
+
 const renderer = createRenderer({
   /**
    * 浏览器平台用于创建元素
