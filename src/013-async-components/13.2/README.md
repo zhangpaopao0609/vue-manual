@@ -280,3 +280,134 @@ function unmountElement(vnode) {
   if(parent) unmount(el, parent)
 }
 ```
+
+### 13.2.4 重试机制
+即加载出现错误时，有能力重新发起加载组件的请求。提供开箱即用的重试机制，对开发体验会很有用。
+
+```js
+/**
+ * 高阶组件，定义异步组件，接收一个异步组件作为参数
+ * @param {*} options 
+ * @returns 返回一个组件
+ */
+function defineAsyncComponent(options) {
+  if(typeof options === 'function') {
+    options = { loader: options }
+  }
+
+  const { loader, delay, loadingComponent, timeout, errorComponent, onError } = options;
+
+  // 一个变量，用于存储异步加载的组件
+  let InnerComp = null;
+  // 记录重试次数
+  let retries = 0;
+
+  function load() {
+    return loader()
+      .catch((error) => {
+        if(onError) {
+          // 如果用户提供了 onError 回调，则将控制权交给用户
+          return new Promise((resolve, reject) => {
+            // 重试
+            const retry = () => {
+              resolve(load());
+              retries++;
+            }
+            // 失败
+            const fail = () => reject(error);
+            // 作为 onError 回调函数的参数，让用户来决定下一步怎么做
+            onError(retry, fail, retries)
+          })
+        } else {
+          throw error;
+        }
+      })
+  }
+
+  return {
+    name: 'AsyncComponentWrapper',
+    setup() {
+      // 是否已经加载完成
+      const loaded = ref(false);
+      // 加载中
+      const loading = ref(false);
+      let delayTimer = null;
+      // 是否发生了错误，并且记录错误对象
+      const error = ref(null);
+      let timeoutTimer = null;
+
+      if (delay) {
+        // 如果存在 delay，则开启一个定时器，当延迟到时候将 loading 设置为 true
+        delayTimer = setTimeout(() => {
+          loading.value = true;
+        }, delay);
+      } else {
+        loading.value = true;
+      }
+
+      // 调用 load 函数加载组件
+      // 加载成功后，将加载成功的组件赋值给 InnerComp，并将 loaded 标记为 true
+      load()
+        .then((comp) => {
+          InnerComp = comp;
+          loaded.value = true;
+        }).catch((err) => {
+          error.value = err;
+        }).finally(() => {
+          // 无论加载是否成功，只要完成，就清除超时定时器
+          clearTimeout(timeoutTimer);
+          // 无论加载是否成功，只要完成，就将 loading 设置为 false，并且清除延迟展示 Loding 定时器
+          loading.value = false;
+          clearTimeout(delayTimer);
+        });
+
+      if (timeout) {
+        timeoutTimer = setTimeout(() => {
+          const e = new Error(`Async component timed out after ${timeout}ms`)
+          error.value = e;
+        }, timeout);
+      }
+
+      return () => {
+        if(loaded.value) {
+          // 如果异步组件加载成功，则渲染该组件
+          return { type: InnerComp };
+        } else if (error.value && errorComponent) {
+          // 当错误存在并且用户配置了 errorComponent 时才展示 Error 组件，同时将 error 作为 props 传递
+          // 渲染错误组件 并且把错误信息通过 props 传递给错误组件
+          return { type: errorComponent, props: { error: error.value } }
+        } else if(loading.value && loadingComponent) {
+          // 如果异步组件正在加载并且配置了 loadingComponent，渲染 loadingComponent
+          return { type: loadingComponent }
+        } else {
+          // 否者渲染一个占位符
+          return { type: Text, children: '' }
+        }
+      }
+    }
+  }
+}
+```
+
+> 这个重试的写法我觉得很有意思，也很有用，值得一学。
+>
+> ```js
+> // load 函数接收一个 onError 回调函数
+> function load(onError) {
+>   // 请求接口，得到 Promise 实例
+>   const p = fetch();
+> 
+>   // 捕获错误
+>   return p.catch(error => {
+>     // 当错误发生时，返回一个新的 Promise 实例，并调用 onError 回调函数
+>     // 同时将 retry 函数组我诶 onError 的参数
+>     return new Promise((resolve, reject) => {
+>       // 重试函数，用来执行重试，执行该函数会重新调用 load 函数并发送请求
+>       const retry = () => resolve(load(onError))
+>       const fail = () => reject(error)
+>       onError(retry, fail)
+>     })
+>   })
+> }
+> ```
+

@@ -657,15 +657,42 @@ function normalizeClass(value) {
  * @returns 返回一个组件
  */
 function defineAsyncComponent(options) {
+  if(typeof options === 'function') {
+    options = { loader: options }
+  }
+
+  const { loader, delay, loadingComponent, timeout, errorComponent, onError } = options;
+
   // 一个变量，用于存储异步加载的组件
   let InnerComp = null;
+  // 记录重试次数
+  let retries = 0;
+
+  function load() {
+    return loader()
+      .catch((error) => {
+        if(onError) {
+          // 如果用户提供了 onError 回调，则将控制权交给用户
+          return new Promise((resolve, reject) => {
+            // 重试
+            const retry = () => {
+              resolve(load());
+              retries++;
+            }
+            // 失败
+            const fail = () => reject(error);
+            // 作为 onError 回调函数的参数，让用户来决定下一步怎么做
+            onError(retry, fail, retries)
+          })
+        } else {
+          throw error;
+        }
+      })
+  }
+
   return {
     name: 'AsyncComponentWrapper',
     setup() {
-      if(typeof options === 'function') {
-        options = { loader: options }
-      }
-      const { loader, delay, loadingComponent, timeout, errorComponent } = options;
       // 是否已经加载完成
       const loaded = ref(false);
       // 加载中
@@ -684,20 +711,21 @@ function defineAsyncComponent(options) {
         loading.value = true;
       }
 
-      // 执行加载器函数，返回一个 Promise 实例
+      // 调用 load 函数加载组件
       // 加载成功后，将加载成功的组件赋值给 InnerComp，并将 loaded 标记为 true
-      loader().then((comp) => {
-        InnerComp = comp;
-        loaded.value = true;
-      }).catch((err) => {
-        error.value = err;
-      }).finally(() => {
-        // 无论加载是否成功，只要完成，就清除超时定时器
-        clearTimeout(timeoutTimer);
-        // 无论加载是否成功，只要完成，就将 loading 设置为 false，并且清除延迟展示 Loding 定时器
-        loading.value = false;
-        clearTimeout(delayTimer);
-      });
+      load()
+        .then((comp) => {
+          InnerComp = comp;
+          loaded.value = true;
+        }).catch((err) => {
+          error.value = err;
+        }).finally(() => {
+          // 无论加载是否成功，只要完成，就清除超时定时器
+          clearTimeout(timeoutTimer);
+          // 无论加载是否成功，只要完成，就将 loading 设置为 false，并且清除延迟展示 Loding 定时器
+          loading.value = false;
+          clearTimeout(delayTimer);
+        });
 
       if (timeout) {
         timeoutTimer = setTimeout(() => {
