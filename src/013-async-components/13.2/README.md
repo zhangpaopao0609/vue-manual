@@ -167,3 +167,116 @@ function defineAsyncComponent(options) {
   }
 }
 ```
+
+### 13.2.3 延时与 Loading 组件
+加载中展示 Loading 组件，但如果网络请求过快，Loading 组件刚刚渲染完成就要卸载去渲染加载的组件，会出现闪烁，所以，可以提供一个延时展示 Loading 组件的机制
+
+异步组件加载受到网络影响较大，加载过程可能很快，也可能很慢。
+- 对于慢，可以通过加载 Loading 组件来提供更好的用户体验
+- 对于快，如果还是从加载开始的那一刻就展示 Loading 组件的话，会导致 Loading 组件刚完成渲染就立即进入卸载阶段，于是出现闪烁的情况。
+
+因此，可以为 Loading 组件设置一个延迟展示的时间。例如，当超过 200ms 没有完成加载，才展示 Loading 组件，否者就不展示了。这样，对于在 200ms 内能够完成加载的情况来说，就避免了闪烁问题。
+> 但是，这并非银弹，是有缺陷的。
+> 
+> 比如，设定 200ms 的延时展示时间，如果请求在 200 ms 以内返回挺好的，但如果是 201 或者 300ms 返回呢？是不是还是存在闪烁呢？所以这并不能完全解决问题，但因为延时展示时间可以由开发者根据自己的请求大致清理来自己设定，所以大部分情况还是可以 cover 掉的。
+
+```js
+/**
+ * 高阶组件，定义异步组件，接收一个异步组件作为参数
+ * @param {*} options 
+ * @returns 返回一个组件
+ */
+function defineAsyncComponent(options) {
+  // 一个变量，用于存储异步加载的组件
+  let InnerComp = null;
+  return {
+    name: 'AsyncComponentWrapper',
+    setup() {
+      if(typeof options === 'function') {
+        options = { loader: options }
+      }
+      const { loader, delay, loadingComponent, timeout, errorComponent } = options;
+      // 是否已经加载完成
+      const loaded = ref(false);
+      // 加载中
+      const loading = ref(false);
+      let delayTimer = null;
+      // 是否发生了错误，并且记录错误对象
+      const error = ref(null);
+      let timeoutTimer = null;
+
+      if (delay) {
+        // 如果存在 delay，则开启一个定时器，当延迟到时候将 loading 设置为 true
+        delayTimer = setTimeout(() => {
+          loading.value = true;
+        }, delay);
+      } else {
+        loading.value = true;
+      }
+
+      // 执行加载器函数，返回一个 Promise 实例
+      // 加载成功后，将加载成功的组件赋值给 InnerComp，并将 loaded 标记为 true
+      loader().then((comp) => {
+        InnerComp = comp;
+        loaded.value = true;
+      }).catch((err) => {
+        error.value = err;
+      }).finally(() => {
+        // 无论加载是否成功，只要完成，就清除超时定时器
+        clearTimeout(timeoutTimer);
+        // 无论加载是否成功，只要完成，就将 loading 设置为 false，并且清除延迟展示 Loding 定时器
+        loading.value = false;
+        clearTimeout(delayTimer);
+      });
+
+      if (timeout) {
+        timeoutTimer = setTimeout(() => {
+          const e = new Error(`Async component timed out after ${timeout}ms`)
+          error.value = e;
+        }, timeout);
+      }
+
+      return () => {
+        if(loaded.value) {
+          // 如果异步组件加载成功，则渲染该组件
+          return { type: InnerComp };
+        } else if (error.value && errorComponent) {
+          // 当错误存在并且用户配置了 errorComponent 时才展示 Error 组件，同时将 error 作为 props 传递
+          // 渲染错误组件 并且把错误信息通过 props 传递给错误组件
+          return { type: errorComponent, props: { error: error.value } }
+        } else if(loading.value && loadingComponent) {
+          // 如果异步组件正在加载并且配置了 loadingComponent，渲染 loadingComponent
+          return { type: loadingComponent }
+        } else {
+          // 否者渲染一个占位符
+          return { type: Text, children: '' }
+        }
+      }
+    }
+  }
+}
+```
+
+这里有一点需要注意的是，当异步组件加载成功后，会卸载 Loading 组件并渲染异步加载的组件，为了支持 Loading 组件的卸载，需要修改 unmount 函数
+
+```js
+/**
+ * 卸载操作
+ * @param {*} vnode 
+ */
+function unmountElement(vnode) {
+  // 卸载时，如果卸载的 vnode 类型是 Fragment，那么需要卸载的是它的所有子节点
+  if (vnode.type === Fragment) {
+    vnode.children.forEach(child => unmountElement(child))
+    return
+  } else if(isObject(vnode.type)) {
+    // 对于组件的卸载，本质上是要卸载组件所渲染的内容，即 subTree
+    unmountElement(vnode.component.subTree)
+  }
+  // 根据 vnode 获取要卸载的真实 DOM 元素
+  const el = vnode.el;
+  // 获取真实 DOM 的父元素
+  const parent = el.parentNode;
+  if(parent) unmount(el, parent)
+}
+```

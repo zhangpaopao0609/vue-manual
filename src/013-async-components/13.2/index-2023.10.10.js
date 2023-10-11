@@ -69,6 +69,9 @@ function createRenderer(options) {
     if (vnode.type === Fragment) {
       vnode.children.forEach(child => unmountElement(child))
       return
+    } else if(isObject(vnode.type)) {
+      // 对于组件的卸载，本质上是要卸载组件所渲染的内容，即 subTree
+      unmountElement(vnode.component.subTree)
     }
     // 根据 vnode 获取要卸载的真实 DOM 元素
     const el = vnode.el;
@@ -662,23 +665,38 @@ function defineAsyncComponent(options) {
       if(typeof options === 'function') {
         options = { loader: options }
       }
-      const { loader, timeout, errorComponent } = options;
+      const { loader, delay, loadingComponent, timeout, errorComponent } = options;
       // 是否已经加载完成
       const loaded = ref(false);
+      // 加载中
+      const loading = ref(false);
+      let delayTimer = null;
       // 是否发生了错误，并且记录错误对象
       const error = ref(null);
       let timeoutTimer = null;
+
+      if (delay) {
+        // 如果存在 delay，则开启一个定时器，当延迟到时候将 loading 设置为 true
+        delayTimer = setTimeout(() => {
+          loading.value = true;
+        }, delay);
+      } else {
+        loading.value = true;
+      }
 
       // 执行加载器函数，返回一个 Promise 实例
       // 加载成功后，将加载成功的组件赋值给 InnerComp，并将 loaded 标记为 true
       loader().then((comp) => {
         InnerComp = comp;
         loaded.value = true;
-        clearTimeout(timeoutTimer);
       }).catch((err) => {
         error.value = err;
       }).finally(() => {
-
+        // 无论加载是否成功，只要完成，就清除超时定时器
+        clearTimeout(timeoutTimer);
+        // 无论加载是否成功，只要完成，就将 loading 设置为 false，并且清除延迟展示 Loding 定时器
+        loading.value = false;
+        clearTimeout(delayTimer);
       });
 
       if (timeout) {
@@ -696,6 +714,9 @@ function defineAsyncComponent(options) {
           // 当错误存在并且用户配置了 errorComponent 时才展示 Error 组件，同时将 error 作为 props 传递
           // 渲染错误组件 并且把错误信息通过 props 传递给错误组件
           return { type: errorComponent, props: { error: error.value } }
+        } else if(loading.value && loadingComponent) {
+          // 如果异步组件正在加载并且配置了 loadingComponent，渲染 loadingComponent
+          return { type: loadingComponent }
         } else {
           // 否者渲染一个占位符
           return { type: Text, children: '' }
