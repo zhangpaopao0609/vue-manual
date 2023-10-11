@@ -188,3 +188,51 @@ function mountComponent(vnode, container, anchor) {
   // ...
 }
 ```
+
+### 14.1.2 include 和 exclude
+默认情况下会缓存所有的的“内部组件”。但有时候期望只缓存特定组件。所以需要支持 include 和 exclude。
+
+为了简化问题，这里设定 include 和 exclude 仅支持正则类型的值。
+
+```js
+/** KeepAlive 组件 */
+const KeepAlive = {
+  name: 'KeepAlive',
+  // KeepAlive 组件独有的属性，用作标识
+  _isKeepAlive: true,
+  props: {
+    include: RegExp,
+    exclude: RegExp,
+  },
+  setup(props, { slots }) {
+    // ...
+
+    return () => {
+      // KeepAlive 的默认插槽就是要被 KeepAlive 的组件
+      let rawVNode = slots.default();
+      // 如果不是组件，直接渲染即可，因为非组件的虚拟节点无法被 KeepAlive
+      if(!isObject(rawVNode.type)) {
+        return rawVNode;
+      }
+      // 获取“内部组件”的 name
+      const name = rawVNode.type.name;
+      if(
+        name &&
+        (
+          // 如果 name 无法被 include 匹配
+          (props.include && !props.include.test(name)) ||
+          // 或者被 exclude 匹配，说明不希望被缓存
+          (props.exclude && props.exclude.test(name))
+        )
+      ) {
+        // 则直接渲染 “内部组件”
+        return rawVNode;
+      }
+
+      // ...
+    }
+  }
+}
+```
+
+这里简化了问题哈，仅仅只是支持了正则类型的 include 和 exclude。实际上可以支持任意的匹配能力。另外，在匹配时，也可以不限于 “内部组件” 的名称，甚至可以让用户自行指定匹配要素

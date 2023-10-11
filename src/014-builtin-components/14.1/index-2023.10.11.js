@@ -760,6 +760,10 @@ function createRenderer(options) {
     name: 'KeepAlive',
     // KeepAlive 组件独有的属性，用作标识
     _isKeepAlive: true,
+    props: {
+      include: RegExp,
+      exclude: RegExp,
+    },
     setup(props, { slots }) {
       // 缓存，用于缓存组件 vnode
       const cache = new Map();
@@ -785,6 +789,20 @@ function createRenderer(options) {
         let rawVNode = slots.default();
         // 如果不是组件，直接渲染即可，因为非组件的虚拟节点无法被 KeepAlive
         if(!isObject(rawVNode.type)) {
+          return rawVNode;
+        }
+        // 获取“内部组件”的 name
+        const name = rawVNode.type.name;
+        if(
+          name &&
+          (
+            // 如果 name 无法被 include 匹配
+            (props.include && !props.include.test(name)) ||
+            // 或者被 exclude 匹配，说明不希望被缓存
+            (props.exclude && props.exclude.test(name))
+          )
+        ) {
+          // 则直接渲染 “内部组件”
           return rawVNode;
         }
 
