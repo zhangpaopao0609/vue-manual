@@ -34,7 +34,8 @@ function createRenderer(options) {
     createText, 
     setText, 
     createComment, 
-    setComment 
+    setComment,
+    nextFrame,
   } = options;
   // 用于存储当前的组件实例
   let currentInstance = null;
@@ -62,7 +63,18 @@ function createRenderer(options) {
         patch(null, child, el)
       });
     }
-    insert(el, container, anchor)
+
+    // 判断一个 vnode 是否需要过渡
+    const needTransition = vnode.transition;
+    if(needTransition) {
+      // 调用 transition.beforeEnter 钩子
+      vnode.transition.beforeEnter(el)
+    };
+    insert(el, container, anchor);
+    if(needTransition) {
+      // 调用 transition.enter 钩子
+      vnode.transition.enter(el)
+    };
   }
   /**
    * 卸载操作
@@ -87,7 +99,14 @@ function createRenderer(options) {
     const el = vnode.el;
     // 获取真实 DOM 的父元素
     const parent = el.parentNode;
-    if(parent) unmount(el, parent)
+    if(parent)  {
+      const performRemove = () => unmount(el, parent)
+      if(vnode.transition) {
+        vnode.transition.leave(el, performRemove)
+      } else {
+        performRemove()
+      }
+    }
   }
   /**
    * 两个子节点均为数组时，进行双端 diff
@@ -402,6 +421,7 @@ function createRenderer(options) {
         createElement,
       }
     }
+
     /**
      * 触发组件自定义事件
      * @param {*} event 事件名
@@ -867,14 +887,67 @@ function createRenderer(options) {
       }
     } 
   }
+  /** Transition */
+  const Transition = {
+    name: 'Transition',
+    setup(props, { slots }) {
+      const innerVNode = slots.default();
 
+      innerVNode.transition = {
+        beforeEnter(el) {
+          // 设置初始状态：添加 enter-form 和 enter-active 类
+          el.classList.add('enter-from');
+          el.classList.add('enter-active');
+        },
+        enter(el) {
+          // 在下一帧切换到结束状态
+          nextFrame(() => {
+            // 移除
+            el.classList.remove('enter-from');
+            // 添加
+            el.classList.add('enter-to');
+
+            // 动画结束后移除元素状态和运动过程
+            el.addEventListener('transitionend', () => {
+              el.classList.remove('enter-to')
+              el.classList.remove('enter-active')
+            })
+          });
+        },
+        leave(el, performRemove) {
+          // 设置离场过渡的初始状态：添加 leave-from 和 leave-active
+          el.classList.add('leave-from');
+          el.classList.add('leave-active');
+
+          // 在下一帧切换元素的状态
+          nextFrame(() => {
+            // 移除
+            el.classList.remove('leave-from');
+            // 添加
+            el.classList.add('leave-to');
+
+            // 动画结束后移除元素状态和运动过程
+            el.addEventListener('transitionend', () => {
+              el.classList.remove('leave-to');
+              el.classList.remove('leave-active');
+              // 当过渡完成后，将 DOM 元素移除
+              performRemove();
+            })
+          });
+        }
+      }
+
+      return innerVNode;
+    }
+  }
   return {
     render,
     currentInstance,
     onMounted,
     defineAsyncComponent,
     KeepAlive,
-    Teleport
+    Teleport,
+    Transition
   }
 }
 
@@ -1010,6 +1083,13 @@ const renderer = createRenderer({
   },
   unmount(el, parent) {
     parent.removeChild(el)
+  },
+  /**
+   * 下一帧
+   * @param {*} cb 
+   */
+  nextFrame(cb) {
+    requestAnimationFrame(cb)
   }
 });
 

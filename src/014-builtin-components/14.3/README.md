@@ -470,3 +470,141 @@ const Teleport = {
 - beforeLeave：在这个阶段添加进入初始状态 leave-from 和动作过程 leave-active
 - enter：在这个阶段（其实就是下一帧）移除掉初始状态并且添加最终状态 leave-to
 - 动效结束：在这个阶段移除掉最终转态 leave-to 和动作过程 leave-active
+
+##  14.3.2 实现 Transition 组件
+
+如下使用 Transition 组件：
+
+```vue
+<template>
+  <Transition>
+    <div>我是需要过渡的元素</div>
+  </Transition>
+</template>
+```
+
+对应的 VDOM 设计为：
+
+```js
+function render() {
+  return {
+    type: Transition,
+    children: {
+      default() {
+        return { type: 'div', children: '我是需要过渡的元素' }
+      }
+    }
+  }
+}
+```
+
+如此，实现一个 Transition 组件，同时需要渲染器的内部支持：
+
+- 进入时调用 transition 的进入钩子
+
+```js
+/**
+ * 挂载操作
+ * @param {*} vnode 
+ * @param {*} container 
+ */
+function mountElement(vnode, container, anchor) {
+  // ...
+
+  // 判断一个 vnode 是否需要过渡
+  const needTransition = vnode.transition;
+  if(needTransition) {
+    // 调用 transition.beforeEnter 钩子
+    vnode.transition.beforeEnter(el)
+  };
+  insert(el, container, anchor);
+  if(needTransition) {
+    // 调用 transition.enter 钩子
+    vnode.transition.enter(el)
+  };
+}
+```
+
+- 卸载时调用 transition 的离开钩子
+
+```js
+/**
+ * 卸载操作
+ * @param {*} vnode 
+ */
+function unmountElement(vnode) {
+  // ...
+  // 根据 vnode 获取要卸载的真实 DOM 元素
+  const el = vnode.el;
+  // 获取真实 DOM 的父元素
+  const parent = el.parentNode;
+  if(parent)  {
+    const performRemove = () => unmount(el, parent)
+    if(vnode.transition) {
+      vnode.transition.leave(el, performRemove)
+    } else {
+      performRemove();
+    }
+  }
+}
+```
+
+- Transition 组件
+
+```js
+/** Transition */
+const Transition = {
+  name: 'Transition',
+  setup(props, { slots }) {
+    const innerVNode = slots.default();
+
+    innerVNode.transition = {
+      beforeEnter(el) {
+        // 设置初始状态：添加 enter-form 和 enter-active 类
+        el.classList.add('enter-from');
+        el.classList.add('enter-active');
+      },
+      enter(el) {
+        // 在下一帧切换到结束状态
+        nextFrame(() => {
+          // 移除
+          el.classList.remove('enter-from');
+          // 添加
+          el.classList.add('enter-to');
+
+          // 动画结束后移除元素状态和运动过程
+          el.addEventListener('transitionend', () => {
+            el.classList.remove('enter-to')
+            el.classList.remove('enter-active')
+          })
+        });
+      },
+      leave(el, performRemove) {
+        // 设置离场过渡的初始状态：添加 leave-from 和 leave-active
+        el.classList.add('leave-from');
+        el.classList.add('leave-active');
+
+        // 在下一帧切换元素的状态
+        nextFrame(() => {
+          // 移除
+          el.classList.remove('leave-from');
+          // 添加
+          el.classList.add('leave-to');
+
+          // 动画结束后移除元素状态和运动过程
+          el.addEventListener('transitionend', () => {
+            el.classList.remove('leave-to');
+            el.classList.remove('leave-active');
+            // 当过渡完成后，将 DOM 元素移除
+            performRemove();
+          })
+        });
+      }
+    }
+
+    return innerVNode;
+  }
+}
+```
+
+这里类名都直接硬编码了，完全可以使用 props 来进行设置。
