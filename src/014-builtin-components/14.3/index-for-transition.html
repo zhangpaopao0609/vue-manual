@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.3.1 原生 DOM 的过渡</title>
+  <style>
+    .box {
+      width: 100px;
+      height: 100px;
+      background-color: skyblue;
+    }
+
+    .enter-from {
+      margin-left: 200px;
+    }
+
+    .enter-to {
+      margin-left: 0px;
+    }
+
+    .enter-active {
+      transition: all 2s linear;
+    }
+
+    .leave-from {
+      margin-top: 0px;
+    }
+
+    .leave-to {
+      margin-top: 200px;
+    }
+
+    .leave-active {
+      transition: all 2s linear;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    // 创建
+    const el = document.createElement('div');
+    el.classList.add('box');
+
+    // *******************进入********************************
+    // 在 DOM 元素被添加到页面之前，将初始状态和运动过程定义到元素上
+    el.classList.add('enter-from');
+    el.classList.add('enter-active');
+
+    // 将元素添加到页面
+    document.body.appendChild(el)
+
+    // 在下一帧切换元素的状态
+    requestAnimationFrame(() => {
+      // 移除
+      el.classList.remove('enter-from');
+      // 添加
+      el.classList.add('enter-to');
+
+      // 动画结束后移除元素状态和运动过程
+      el.addEventListener('transitionend', () => {
+        el.classList.remove('enter-to')
+        el.classList.remove('enter-active')
+      })
+    });
+
+    // *******************离开********************************
+    el.addEventListener('click', () => {
+      // 添加初始状态和运动过程定义
+      el.classList.add('leave-from');
+      el.classList.add('leave-active');
+
+      // 在下一帧切换元素的状态
+      requestAnimationFrame(() => {
+        // 移除
+        el.classList.remove('leave-from');
+        // 添加
+        el.classList.add('leave-to');
+
+        // 动画结束后移除元素状态和运动过程
+        el.addEventListener('transitionend', () => {
+          el.classList.remove('leave-to');
+          el.classList.remove('leave-active');
+          // 当过渡完成后，将 DOM 元素移除
+          el.parentNode.removeChild(el)
+        })
+      });
+    })
+  </script>
+</body>
+</html>
