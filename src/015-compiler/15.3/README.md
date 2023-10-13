@@ -1,6 +1,6 @@
 # 15 编译器
 
-## 15.1 模板 SDL 的编译器。
+## 15.1 模板 SDL 的编译器
 
 GPL - 通用用途语言（general purpose language）
 DSL - 领域特定语言（domain-specific language）
@@ -181,4 +181,138 @@ function tokenize(str) {
 const str = "<div><p>vue1</p><p>vue2</p></div>";
 const res = tokenize(str);
 console.log(res);
+```
+
+## 15.3 构造 AST
+
+DSL 和 GPL 最大的区别在于
+- GPL 图灵完备的
+- DSL 不要求图灵完备的
+
+vue 模板构造 AST 相对简单，因为 HTML 标签元素之间天然嵌套，形成属性结构，这与 AST 非常类似。
+
+假设有如下模板：
+
+```html
+<div><p>Vue</p><p>Template</p></div>
+```
+
+我们将这段模板对应的 AST 设计为：
+
+```js
+const ast = {
+  type: 'Root',
+  children: [
+    {
+      type: 'Element',
+      tag: 'div',
+      children: [
+        {
+          type: 'Element',
+          tag: 'p',
+          children: [
+            {
+              type: 'Text',
+              content: 'Vue',
+            }
+          ]
+        },
+        {
+          type: 'Element',
+          tag: 'p',
+          children: [
+            {
+              type: 'Text',
+              content: 'Template',
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+可以看到，AST 在结构上与模板是“同构”的。
+
+怎么实现呢？
+
+1. 我们通过 tokenize 获得了模板对应的 token。
+
+```js
+[
+  { type: 'tagOpen', name: 'div' },
+  { type: 'tagOpen', name: 'p' },
+  { type: 'text', content: 'Vue' },
+  { type: 'tagEnd', name: 'p' },
+  { type: 'tagOpen', name: 'p' },
+  { type: 'text', content: 'Template' },
+  { type: 'tagEnd', name: 'p' },
+  { type: 'tagEnd', name: 'div' }
+]
+```
+
+2. 然后再利用栈将它 parser 成 ast
+
+```js
+const AstType = {
+  Element: 'Element',
+  Text: 'Text',
+}
+
+/**
+ * parser
+ * @param {*} str 接收模板作为参数
+ * @returns 模板 ast
+ */
+function parser(str) {
+  // 对模板进行标记化，得到 tokens
+  const tokens = tokenize(str);
+  // 创建 Root 根节点
+  const root = {
+    type: 'Root',
+    children: []
+  };
+  // 创建 elementStack 栈，起初只有 Root 根节点
+  const elementStack = [root];
+
+  // 只要还有 token，就循环下去
+  while (tokens.length) {
+    // 当前的父节点
+    const parent = elementStack[elementStack.length - 1];
+    // 当前的 token
+    const nt = tokens[0];
+    switch (nt.type) {
+      case TokenType.tagOpen:
+        // 标签开始
+        // 创建标签
+        const elementNode = {
+          type: AstType.Element,
+          tag: nt.name,
+          children: []
+        }
+        parent.children.push(elementNode);
+        elementStack.push(elementNode)
+        break;
+      case TokenType.text:
+        // 文本
+        // 创建标签
+        const textNode = {
+          type: AstType.Text,
+          content: nt.content,
+        }
+        parent.children.push(textNode);
+        break;
+      case TokenType.tagEnd:
+          // 标签结束
+          elementStack.pop()
+          break;
+      default:
+        break;
+    }
+    tokens.shift();
+  }
+
+  return root
+}
 ```
