@@ -459,3 +459,114 @@ function transform(ast) {
   dump(ast)
 }
 ```
+
+### 15.4.3 进入与退出
+在转换 AST 的过程中，往往需要根据子节点的情况来决定如何对当前节点进行转换，这就要求父节点转换必须等待子节点全部转换完毕再执行。
+
+但现在的 dfs 处理是在进入节点时触发的，所以我们需要修改一下处理的时机。
+
+实现方式：将 transforms 函数存起来，然后在退出阶段执行
+
+```js
+/**
+ * 遍历 ast 中的所有节点
+ * @param {*} ast
+ * @param {*} context 上下文信息
+ */
+function traverseNode(ast, context) {
+  // 设置当前节点
+  context.currentNode = ast;
+  // 增加退出阶段的回调函数数组
+  const exitFns = [];
+  // 执行节点转换
+  const transforms = context.nodeTransforms;
+  for (let i = 0; i < transforms.length; i++) {
+    // 转换函数可以返回另一个函数，该函数即作为退出阶段的回调函数
+    const onExit = transforms[i](context.currentNode, context);
+    if (onExit) {
+      // 将退出阶段的回调函数添加到 exitFns 数组中
+      exitFns.push(onExit)
+    }
+    // 处理后，如果节点不存在了，那么 return
+    if (!context.currentNode) return;
+  }
+
+  // 如果有子节点，则递归地调用 traverseNode 函数进行遍历
+  const children = context.currentNode.children;
+  if (children) {
+    for (let i = 0; i < children.length; i++) {
+      // 递归地调用 traverseNode 转换子节点之前，将当前节点设置为父节点
+      context.parent = context.currentNode;
+      // 设置位置索引
+      context.childIndex = i;
+      traverseNode(children[i], context)
+    }
+  }
+
+  // 在节点处理的最后阶段中执行缓存到 exitFns 中的回调函数
+  // 注意，这里我们要反序执行
+  let i = exitFns.length;
+  while (i--) {
+    exitFns[i]()
+  }
+}
+
+/**
+ * 模板 ast 转换为 js ast
+ * @param {*} ast 
+ */
+function transform(ast) {
+  function transformText (node, context) {
+   return () => {
+    if(node.type === AstType.Text) {
+      console.log(node.content);
+    }
+   }
+  }
+
+  function transformElement (node, context) {
+    return () => {
+      if(node.type === AstType.Element) {
+        console.log(node.tag);
+      }
+     }
+  }
+
+  const context = {
+    // 当前节点
+    currentNode: null,
+    // 父节点
+    parentNode: null,
+    /// 当前节点在父节点 children 中的位置索引
+    childIndex: 0,
+    // 节点处理
+    nodeTransforms: [
+      transformText,
+      transformElement,
+    ],
+    // 替换节点
+    replaceNode(node) {
+      // 为了替换节点，我们需要修改 ast
+      // 找到当前节点的父节点和在父节点中的位置
+      const { parent, childIndex } = context;
+      // 替换
+      parent.children[childIndex] = node;
+      // 设置当前 node
+      context.currentNode = node;
+    },
+    // 移除节点
+    removeNode() {
+      const { parent, childIndex } = context
+      if (parent) {
+        // 调用数组的 splice 方法，根据当前节点的索引删除当前节点
+        parent.children.splice(childIndex, 1, 0);
+        // 置空当前节点
+        context.currentNode = null;
+      }
+    }
+  }
+
+  traverseNode(ast, context);
+  dump(ast)
+}
+```

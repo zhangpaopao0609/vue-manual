@@ -207,17 +207,23 @@ function dump(node, indent = 0) {
 function traverseNode(ast, context) {
   // 设置当前节点
   context.currentNode = ast;
-
+  // 增加退出阶段的回调函数数组
+  const exitFns = [];
   // 执行节点转换
   const transforms = context.nodeTransforms;
   for (let i = 0; i < transforms.length; i++) {
-    transforms[i](context.currentNode, context);
+    // 转换函数可以返回另一个函数，该函数即作为退出阶段的回调函数
+    const onExit = transforms[i](context.currentNode, context);
+    if (onExit) {
+      // 将退出阶段的回调函数添加到 exitFns 数组中
+      exitFns.push(onExit)
+    }
     // 处理后，如果节点不存在了，那么 return
-    if(!context.currentNode) return;
+    if (!context.currentNode) return;
   }
 
   // 如果有子节点，则递归地调用 traverseNode 函数进行遍历
-  const children = currentNode.children;
+  const children = context.currentNode.children;
   if (children) {
     for (let i = 0; i < children.length; i++) {
       // 递归地调用 traverseNode 转换子节点之前，将当前节点设置为父节点
@@ -227,6 +233,13 @@ function traverseNode(ast, context) {
       traverseNode(children[i], context)
     }
   }
+
+  // 在节点处理的最后阶段中执行缓存到 exitFns 中的回调函数
+  // 注意，这里我们要反序执行
+  let i = exitFns.length;
+  while (i--) {
+    exitFns[i]()
+  }
 }
 
 /**
@@ -234,6 +247,22 @@ function traverseNode(ast, context) {
  * @param {*} ast 
  */
 function transform(ast) {
+  function transformText (node, context) {
+   return () => {
+    if(node.type === AstType.Text) {
+      console.log(node.content);
+    }
+   }
+  }
+
+  function transformElement (node, context) {
+    return () => {
+      if(node.type === AstType.Element) {
+        console.log(node.tag);
+      }
+     }
+  }
+
   const context = {
     // 当前节点
     currentNode: null,
@@ -242,7 +271,10 @@ function transform(ast) {
     /// 当前节点在父节点 children 中的位置索引
     childIndex: 0,
     // 节点处理
-    nodeTransforms: [],
+    nodeTransforms: [
+      transformText,
+      transformElement,
+    ],
     // 替换节点
     replaceNode(node) {
       // 为了替换节点，我们需要修改 ast
@@ -256,7 +288,7 @@ function transform(ast) {
     // 移除节点
     removeNode() {
       const { parent, childIndex } = context
-      if(parent) {
+      if (parent) {
         // 调用数组的 splice 方法，根据当前节点的索引删除当前节点
         parent.children.splice(childIndex, 1, 0);
         // 置空当前节点
@@ -269,4 +301,5 @@ function transform(ast) {
   dump(ast)
 }
 
-dump(templateAST);
+// dump(templateAST);
+transform(templateAST)
