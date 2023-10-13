@@ -201,18 +201,72 @@ function dump(node, indent = 0) {
 
 /**
  * 遍历 ast 中的所有节点
- * @param {*} ast 
+ * @param {*} ast
+ * @param {*} context 上下文信息
  */
-function traverseNode(ast) {
-  // 当前节点，ast 本身就是 Root 节点
-  const currentNode = ast;
+function traverseNode(ast, context) {
+  // 设置当前节点
+  context.currentNode = ast;
+
+  // 执行节点转换
+  const transforms = context.nodeTransforms;
+  for (let i = 0; i < transforms.length; i++) {
+    transforms[i](context.currentNode, context);
+    // 处理后，如果节点不存在了，那么 return
+    if(!context.currentNode) return;
+  }
+
   // 如果有子节点，则递归地调用 traverseNode 函数进行遍历
   const children = currentNode.children;
   if (children) {
     for (let i = 0; i < children.length; i++) {
-      traverseNode(children[i])
+      // 递归地调用 traverseNode 转换子节点之前，将当前节点设置为父节点
+      context.parent = context.currentNode;
+      // 设置位置索引
+      context.childIndex = i;
+      traverseNode(children[i], context)
     }
   }
 }
 
-dump(templateAST)
+/**
+ * 模板 ast 转换为 js ast
+ * @param {*} ast 
+ */
+function transform(ast) {
+  const context = {
+    // 当前节点
+    currentNode: null,
+    // 父节点
+    parentNode: null,
+    /// 当前节点在父节点 children 中的位置索引
+    childIndex: 0,
+    // 节点处理
+    nodeTransforms: [],
+    // 替换节点
+    replaceNode(node) {
+      // 为了替换节点，我们需要修改 ast
+      // 找到当前节点的父节点和在父节点中的位置
+      const { parent, childIndex } = context;
+      // 替换
+      parent.children[childIndex] = node;
+      // 设置当前 node
+      context.currentNode = node;
+    },
+    // 移除节点
+    removeNode() {
+      const { parent, childIndex } = context
+      if(parent) {
+        // 调用数组的 splice 方法，根据当前节点的索引删除当前节点
+        parent.children.splice(childIndex, 1, 0);
+        // 置空当前节点
+        context.currentNode = null;
+      }
+    }
+  }
+
+  traverseNode(ast, context);
+  dump(ast)
+}
+
+dump(templateAST);

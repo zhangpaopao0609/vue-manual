@@ -324,3 +324,138 @@ AST 转化 ----> 模板 AST 转化为 JS AST
 ### 15.4.1 节点的访问
 要实现对 AST 的转化，那么就要访问 AST 上的每一个节点，这样才能有机会对特定的节点进行修改、替换、删除等操作。因为是树形，所以直接 DFS 即可。
 
+```js
+/**
+ * 查看并打印所有节点
+ * @param {*} node ast
+ * @param {*} indent 层级
+ */
+function dump(node, indent = 0) {
+  const type = node.type;
+  const desc =
+    node.type === AstType.Root
+      ? ''
+      : type === AstType.Element
+        ? node.tag
+        : node.content
+  console.log(`${'-'.repeat(indent)}${type}: ${desc}`);
+  if (node.children) {
+    node.children.forEach(chid => dump(chid, indent + 2));
+  }
+}
+
+/**
+ * 遍历 ast 中的所有节点
+ * @param {*} ast 
+ */
+function traverseNode(ast) {
+  // 当前节点，ast 本身就是 Root 节点
+  const currentNode = ast;
+  // 如果有子节点，则递归地调用 traverseNode 函数进行遍历
+  const children = currentNode.children;
+  if (children) {
+    for (let i = 0; i < children.length; i++) {
+      traverseNode(children[i])
+    }
+  }
+}
+```
+
+### 15.4.2 转换上下文与节点操作
+上下文包括：
+- 当前节点
+- 父节点
+- 当前节点在父节点的位置信息
+- 对节点的操作
+
+```js
+/**
+ * 遍历 ast 中的所有节点
+ * @param {*} ast
+ * @param {*} context 上下文信息
+ */
+function traverseNode(ast, context) {
+  // 设置当前节点
+  context.currentNode = ast;
+
+  // 执行节点转换
+  const transforms = context.nodeTransforms;
+  for (let i = 0; i < transforms.length; i++) {
+    transforms[i](context.currentNode, context);
+  }
+
+  // 如果有子节点，则递归地调用 traverseNode 函数进行遍历
+  const children = currentNode.children;
+  if (children) {
+    for (let i = 0; i < children.length; i++) {
+      // 递归地调用 traverseNode 转换子节点之前，将当前节点设置为父节点
+      context.parent = context.currentNode;
+      // 设置位置索引
+      context.childIndex = i;
+      traverseNode(children[i], context)
+    }
+  }
+}
+
+function transform(ast) {
+  const context = {
+    // 当前节点
+    currentNode: null,
+    // 父节点
+    parentNode: null,
+    /// 当前节点在父节点 children 中的位置索引
+    childIndex: 0,
+    // 节点处理
+    nodeTransforms: []
+  }
+
+  traverseNode(ast, context);
+  dump(ast)
+}
+```
+
+在有了上下文之后，我们还可以额外提供一些通用处理函数
+- 节点替换函数 replaceNode
+- 节点删除函数 removeNode
+
+```js
+/**
+ * 模板 ast 转换为 js ast
+ * @param {*} ast 
+ */
+function transform(ast) {
+  const context = {
+    // 当前节点
+    currentNode: null,
+    // 父节点
+    parentNode: null,
+    /// 当前节点在父节点 children 中的位置索引
+    childIndex: 0,
+    // 节点处理
+    nodeTransforms: [],
+    // 替换节点
+    replaceNode(node) {
+      // 为了替换节点，我们需要修改 ast
+      // 找到当前节点的父节点和在父节点中的位置
+      const { parent, childIndex } = context;
+      // 替换
+      parent.children[childIndex] = node;
+      // 设置当前 node
+      context.currentNode = node;
+    },
+    // 移除节点
+    removeNode() {
+      const { parent, childIndex } = context
+      if(parent) {
+        // 调用数组的 splice 方法，根据当前节点的索引删除当前节点
+        parent.children.splice(childIndex, 1, 0);
+        // 置空当前节点
+        context.currentNode = null;
+      }
+    }
+  }
+
+  traverseNode(ast, context);
+  dump(ast)
+}
+```
