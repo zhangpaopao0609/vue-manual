@@ -13,12 +13,21 @@ const TokenType = {
   tagEnd: 'tagEnd',
 }
 
+const AstType = {
+  Element: 'Element',
+  Text: 'Text',
+}
+
 // 一个辅助函数，用于判断是否是字母
 function isAlpha(char) {
   return char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z'
 }
 
-// 接收模板字符串作为参数，并将模板切割为 Token 返回
+/**
+ * 接收模板字符串作为参数，并将模板切割为 Token 返回
+ * @param {*} str 
+ * @returns 
+ */
 function tokenize(str) {
   // 状态机的当前状态：初始状态
   let currentState = TokenState.initial;
@@ -109,19 +118,6 @@ function tokenize(str) {
   return tokens;
 }
 
-// const str = "<p>vue</p>";
-// const res = tokenize(str);
-// console.log(res);
-
-const str = "<div><p>Vue</p><p>Template</p></div>";
-const res = tokenize(str);
-console.log(res);
-
-const AstType = {
-  Element: 'Element',
-  Text: 'Text',
-}
-
 /**
  * parser
  * @param {*} str 接收模板作为参数
@@ -177,5 +173,7 @@ function parser(str) {
 
   return root
 }
+
+const str = "<div><p>Vue</p><p>Template</p></div>";
 
 console.log(JSON.stringify(parser(str), null, 2));
