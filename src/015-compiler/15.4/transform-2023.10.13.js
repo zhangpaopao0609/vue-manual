@@ -300,6 +300,6 @@ function transform(ast) {
   traverseNode(ast, context);
   dump(ast)
 }
-
-// dump(templateAST);
-transform(templateAST)
+// console.log(JSON.stringify(templateAST, null, 2));
+// dump(templateAST); 
+transform(templateAST);
