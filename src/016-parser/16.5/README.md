@@ -152,3 +152,63 @@ function parseElement(context, ancestors) {
 ```
 
 ## 16.5 解析属性
+
+```js
+function parseAttributes(context) {
+  const props = [];
+
+  while(
+    !context.source.startsWith('>') &&
+    !context.source.startsWith('/>')
+  ) {
+    // 匹配属性名称
+    const match = /^[^\t\r\n\f />][^\t\r\n\f />=]*/.exec(context.source);
+    // 属性名
+    const name = match[0];
+    // 消费属性名
+    advanceBy(name.length);
+    // 消费空白字符
+    advanceSpaces();
+    // 消费 =
+    advanceBy(1)
+    advanceSpaces()
+
+    // 记录属性值
+    let value = '';
+    // 获取当前模板内容的第一个字符
+    const quote = context.source[0];
+    // 是否被引号引用
+    const isQuoted = quote === '"' || quote === "'";
+    if(isQuoted) {
+      // 消费引号
+      advanceBy(1)
+      // 获取下一个引号的索引
+      const endQuoteIndex = context.source.indexOf(quote);
+      // 能找到
+      if(endQuoteIndex > -1) {
+        // 属性值
+        value = context.source.slice(0, endQuoteIndex);
+        advanceBy(value.length);
+        advanceBy(1)
+      } else {
+        // 没找到
+        console.error('缺少引号')
+      }
+    } else {
+      // 没有被引号
+      // ! 这里与书本不一致，我觉得这里应该要再添加一个 /，因为自闭合标签的属性
+      const match = /^[^\t\r\n\f />]+/.exec(context.source);
+      value = match[0];
+      advanceBy(value.length);
+    }
+    advanceSpaces();
+    props.push({
+      type: TAT.Attribute,
+      name,
+      value
+    })
+  }
+
+  return props;
+}
+```
