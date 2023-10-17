@@ -3,7 +3,10 @@ const TAT = {
   Root: 'Root',
   Element: 'Element',
   Text: 'Text',
-  Attribute: 'Attribute'
+  Attribute: 'Attribute',
+  Interpolation: 'Interpolation',
+  Expression: 'Expression',
+  Comment: 'Comment',
 }
 
 /** 定义文本模式，作为一个状态表 */
@@ -122,6 +125,61 @@ function decodeHtml(rawText, asAttr = false) {
     }
   }
   return decodedText;
+}
+
+/**
+ * 解析注释
+ * @param {*} context 
+ */
+function parseComment(context) {
+  const { advanceBy, advanceSpaces } = context;
+  // 消费开始界符
+  advanceBy('<!--'.length);
+  // 找到结束定界符的位置索引
+  let closeIndex = context.source.indexOf('-->');
+
+  if(closeIndex < 0) {
+    console.error('差值缺少结束定界符')
+  }
+
+  const content = context.source.slice(0, closeIndex);
+
+  advanceBy(content.length);
+  advanceBy('-->'.length)
+
+  return {
+    type: TAT.Comment,
+    content
+  }
+}
+
+/**
+ * 解析插值
+ * @param {*} context 
+ */
+function parseInterpolation(context) {
+  const { advanceBy, advanceSpaces } = context;
+  // 消费开始界符
+  advanceBy(2);
+  // 找到结束定界符的位置索引
+  let closeIndex = context.source.indexOf('}}');
+
+  if(closeIndex < 0) {
+    console.error('差值缺少结束定界符')
+  }
+
+  const content = context.source.slice(0, closeIndex);
+
+  advanceBy(content.length);
+  advanceBy(2)
+
+  return {
+    type: TAT.Interpolation,
+    content: {
+      type: TAT.Expression,
+      content: decodeHtml(content),
+    }
+  }
 }
 
 /**
