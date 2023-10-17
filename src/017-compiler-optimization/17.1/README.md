@@ -85,3 +85,130 @@ const vnode = {
 - 带有 v-for、v-if/v-else-if/v-else 的节点
 
 这种均需要作为一个 Block。
+
+### 17.1.3 收集动态节点
+假设如下模板：
+```html
+<div id="foo">
+  <p class="bar">{{ text }}</p>
+</div>
+```
+首先，编译器会将其编译成 
+
+```js
+render() {
+  return createVNode('div', { id: 'foo' }, [
+    createVNode('p', { class: 'bar' }, text)
+  ])
+} 
+```
+第一个要明确的是：`createVNode` 并不是一个什么神奇的东西，它就是用于辅助生成 vnode 的一个函数。
+> 自己写 vnode 比较麻烦。当然， createVNode 不仅仅只有这一个作用哈，它还是可以用于生成 dynamicChilren。
+最终希望的 vnode 是这样的：
+
+```js
+render() {
+  return {
+    type: 'div',
+    props: {
+      id: 'foo',
+    },
+    children: [
+      {
+        type: 'p',
+        props: {
+          class: 'bar',
+        },
+        children: [
+          { type: Text, children: text }
+        ]
+      }
+    ]
+  }
+} 
+```
+
+所以 大概我们能知道， `createVNode` 是这样的：
+
+```js
+function createVNode(type, props, children) {
+  const key = props && props.key;
+  props && delete props.key;
+
+  return {
+    type,
+    props,
+    children,
+    key
+  }
+}
+```
+
+编译器在编译时会将提取的关键信息添加到 `createVNode` 参数上，如上述 vnode，编译器优化后，会生成带有补丁标志（patch flag）的渲染函数
+
+```js
+render() {
+  return createVNode('div', { id: 'foo' }, [
+    createVNode('p', { class: 'bar' }, text, PatchFlags.TEXT)
+  ])
+} 
+```
+
+我们就可以利用这个标识来收集该 Block 的 dynamicChildren 了。
+
+我么来看看，render 函数执行时，createVNode 函数是怎么执行的，是由内向外执行，也就是说，内部的 createVNode 会先执行完成，然后 外层的 createVNode 才会执行。
+
+```js
+// 动态节点栈
+const dynamicChildrenStack = [];
+
+let currentDynamicChildren = [];
+
+function openBlock() {
+  dynamicChildrenStack.push(currentDynamicChildren = [])
+}
+
+function closeBlock() {
+  // 为什么这么设计，因是因为树形，就是一个 block 下可能会有层级的 block
+  currentDynamicChildren = dynamicChildrenStack.pop()
+}
+
+function createVNode(tag, props, children, flags) {
+  const key = props && props.key
+  props && delete props.key
+
+  const vnode = {
+    tag,
+    props,
+    children,
+    key,
+    patchFlags: flags
+  }
+
+  if (typeof flags !== 'undefined' && currentDynamicChildren) {
+    // 动态节点，将其添加到当前动态节点集合中
+    currentDynamicChildren.push(vnode)
+  }
+}
+
+function createBlock(type, props, children) {
+  // block 本质上也是一个 vnode
+  const block = createVNode(type, props, children);
+  // 将当前动态集合作为 block.dynamicChildren
+  block.dynamicChildren = currentDynamicChildren;
+
+  // 关闭 block
+  closeBlock();
+  // 返回
+  return block;
+}
+
+function render() {
+  // 1. 使用 createBlock 代替 createVNode 来创建 block
+  // 2. 每当调用 createBlock 之前，先调用 openBlock
+  // ! 我这里就有个问题了，为啥不把 openBlock 直接放到 createBlock 中
+  return (openBlock(), createBlock('div', { id: 'foo' }, [
+    createVNode('p', { class: 'bar' }, text, PatchFlags.TEXT)
+  ]))
+};
+```
