@@ -356,3 +356,63 @@ function patchElement(n1, n2) {
 ```
 
 这样，当 v-if 条件为真时，父级 Block 的 dynamicChildren 数组中包含的是 Block（section v-if）；反之 为 Block（div v-else）。这样，在 diff 时，渲染器能够根据 type 和 key 的不同来区分，这样就解决了。
+
+### 17.2.2 带有 v-for 指令的节点
+
+v-if 会让 vdom 树不稳定，v-for 同样也会。如下模板：
+
+```html
+<div>
+  <p v-for="item in list">{{ item }}</p>
+  <i>{{ foo }}</i>
+  <i>{{ bar }}</i>
+</div>
+```
+
+在更新过程中，list 由 [1, 2] 变成了 [1]，按照之前的思路，只有根目录是 block，那么会更新前后的 block 树是：
+
+```js
+// 更新前
+const prevBlock = {
+  type: 'div',
+  dynamicChildren: [
+    { type: 'p', children: 1, 1 /* TEXT */ },
+    { type: 'p', children: 2, 1 /* TEXT */ },
+    { type: 'i', children: ctx.foo, 1 /* TEXT */ },
+    { type: 'i', children: ctx.bar, 1 /* TEXT */ },
+  ]
+}
+```
+
+```js
+// 更新后
+const nextBlock = {
+  type: 'div',
+  dynamicChildren: [
+    { type: 'p', children: 1, 1 /* TEXT */ },
+    { type: 'i', children: ctx.foo, 1 /* TEXT */ },
+    { type: 'i', children: ctx.bar, 1 /* TEXT */ },
+  ]
+}
+```
+
+此时直接使用 dynamicChildren 进行 diff 就已经不可行了，结构都已经发生变化了。
+
+那么如何处理呢？非常简单，让 v-for 的节点也作为 block 就好了。
+
+```js
+// 更新后
+const block = {
+  type: 'div',
+  dynamicChildren: [
+    { 
+      type: Fragment, 
+      dynamicChildren: [
+        { type: 'p', children: 1, 1 /* TEXT */ },
+      ] 
+    },
+    { type: 'i', children: ctx.foo, 1 /* TEXT */ },
+    { type: 'i', children: ctx.bar, 1 /* TEXT */ },
+  ]
+}
+```
