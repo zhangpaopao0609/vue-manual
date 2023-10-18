@@ -416,3 +416,32 @@ const block = {
   ]
 }
 ```
+
+### 17.2.3 Fragment 的稳定性
+
+```html
+<p v-for="item in list">{{ item }}</p>
+```
+
+list 数组从 [1, 2] 到 [1] 时，Fragment 节点在更新前后对应的内容分别是：
+
+```js
+// 更新前
+const prevBlock = {
+  type: Fragment,
+  dynamicChildren: [
+    { type: 'p', children: 1, 1 /* TEXT */ },
+    { type: 'p', children: 2, 1 /* TEXT */ },
+  ]
+}
+
+// 更新后 // ! 这里书上又写错了
+const nextBlock = {
+  type: Fragment,
+  dynamicChildren: [
+    { type: 'p', children: 1, 1 /* TEXT */ },
+  ]
+}
+```
+
+所谓的结构不稳定，从结果上看，指的是更新前后一个 block 的 dynamicChildren 数组中收集的动态节点的数量或顺序不一致。这种不一致会导致更新出现错误，那么只能放弃根据 dynamicChildren 数组中的动态节点进行靶向更新的思路，并回退到传统 diff 手段，即直接使用 Fragment 的 children 而非 dynamicChildren 来进行 diff 操作。
