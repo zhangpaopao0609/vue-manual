@@ -212,3 +212,71 @@ function render() {
   ]))
 };
 ```
+
+### 17.1.4 渲染器的运行时支持
+
+运行时现在能够获取到 dynamicChildren 以及节点的 patchFlag 了，当 patch 时，可以仅需要 patch dynamicChildren 里面的节点了（即动态节点），同时，还可以根据 patchFlag 实现靶向更新
+
+```js
+/**
+ * 更新 block
+ * @param {*} n1 
+ * @param {*} n2 
+ */
+function patchBlockChildren(n1, n2) {
+  for (let i = 0; i < n2.dynamicChildren.length; i++) {
+    patchElement(n1.dynamicChildren[i], n2.dynamicChildren[i])
+  }
+}
+/**
+ * 更新元素，走到这里，说明新旧 vnode 类型是一致的，即是同一种节点元素或组件
+ * @param {*} n1 旧 vnode
+ * @param {*} n2 新 vnode
+ */
+function patchElement(n1, n2) {
+  const el = n2.el = n1.el;
+  // 先更新属性
+  const oldProps = n1.props || {};
+  const newProps = n2.props || {};
+
+  if (n2.patchFlag) { // ! 书上写的是 patchFlags，感觉又写错了
+    // 利用 patchFlags 实现动态节点的靶向更新属性
+    const { patchFlag } = n2
+    if (patchFlag & 1) {
+      // 说明文本是动态的，先不处理
+    }
+    if (patchFlag & 2) {
+      // 说明 class 是动态的，处理 calss 即可
+    }
+    if (patchFlag & 4) {
+      // 说明 class 是动态的，处理 style 即可
+    }
+    // ... 继续，靶向处理完所有的类型
+  } else {
+    // 如果没有 patchFlag，那么全量处理
+
+    // 挂载属性，如果新旧属性值一致，就不用动了，否者更新
+    for (const key in newProps) {
+      if (newProps[key] !== oldProps[key]) {
+        patchProps(el, key, null, newProps[key])
+      }
+    }
+
+    // 卸载旧属性，如果属性在旧中有，但新的没有，那么便卸载掉属性
+    for (const key in oldProps) {
+      if(!(key in newProps)) {
+        patchProps(el, key, null, null)
+      }
+    }
+  }
+
+  // 处理完属性后，继续处理 children
+  if(n2.dynamicChildren) {
+    // 调用 patchBlockChildren 函数这样只会更新动态节点
+    patchBlockChildren(n1, n2);
+  } else {
+    // 更新子节点
+    patchChildren(n1, n2, el);
+  }
+}
+```
