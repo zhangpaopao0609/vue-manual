@@ -280,3 +280,79 @@ function patchElement(n1, n2) {
   }
 }
 ```
+
+## 17.2 Block 树
+
+目前，我们仅设定了组件模板根节点为 Block 角色，但仅仅这样是不足以满足需要的。
+
+### 17.2.1 带有 v-if 指令的节点
+
+如下模板
+
+```html
+<div>
+  <section v-if="foo">
+    <p>{{ a }}</p>
+  </section>
+  <div v-else>
+    <p>{{ a }}</p>
+  </div>
+</div>
+```
+
+假设目前只有模板根节点是 Block 的话
+- foo 为 true 时，收集到的 dynamicChildren 会是
+  ```js
+  const vnode = {
+    type: 'div',
+    children: [
+      // ...
+    ],
+    dynamicChildren: [
+      { type: 'p', children: ctx.a, patchFlag: PatchFlags.TEXT }
+    ]  
+  }
+  ```
+- foo 为 false 时，收集到的 dynamicChildren 会是
+  ```js
+  const vnode = {
+    type: 'div',
+    children: [
+      // ...
+    ],
+    dynamicChildren: [
+      { type: 'p', children: ctx.a, patchFlag: PatchFlags.TEXT }
+    ]  
+  } 
+  ```
+
+可以看到，不论 foo 为何，dynamicChildren 都是一样的，渲染器将只会 patch 这一部分。但实际上， 它的父级元素是发生变化了的。
+
+上述问题的根本原因在于，dynamicChildren 数组收集的动态节点是忽略了 vdom 树层级的。换句话说，结构化指令会导致更新前后模板的结构发生变化，即结构不稳定，但 dynamicChildren 是不会收集到这个信息的。那么如何解决呢？很简单，只需要让带有 v-if/v-else-if/v-else 等结构化指令的节点也作为 Block 角色即可。
+
+```js
+  const vnode = {
+  type: 'div',
+  children: [
+    // ...
+  ],
+  dynamicChildren: [
+    { 
+      type: 'section', 
+      children: [/** ... */],
+      dynamicChildren: [
+        { type: 'p', children: ctx.a, patchFlag: PatchFlags.TEXT }
+      ] 
+    },
+    { 
+      type: 'div', 
+      children: [/** ... */],
+      dynamicChildren: [
+        { type: 'p', children: ctx.a, patchFlag: PatchFlags.TEXT }
+      ] 
+    }
+  ]  
+} 
+```
+
+这样，当 v-if 条件为真时，父级 Block 的 dynamicChildren 数组中包含的是 Block（section v-if）；反之 为 Block（div v-else）。这样，在 diff 时，渲染器能够根据 type 和 key 的不同来区分，这样就解决了。
