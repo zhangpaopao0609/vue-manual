@@ -162,3 +162,100 @@ function renderElementVNode(vnode) {
    ```js
    const VOID_TAGS ='area,base,br,col,embed,hr,img,input,link,meta,param,source,track,wbr';
   ``` 
+
+2. HTML 属性
+- boolean attribute 处理
+  例如 checked/disabled 这样的属性，只要给了值且值不为 false，那么最终都应该直接给属性名就好了
+- vue 的特殊属性
+  key/ref 应该忽略，除此之外，因为同构渲染不需要绑定事件，所以事件也应该忽略
+
+```js
+const shouldIgnoreProp = ['key', 'ref'];
+const BOOLEAN_ATTRS = `
+  itemscope,allowfullscreen,formnovalidate,ismap,nomodule,novalidate,readonly,async,autofocus,
+  autoplay,controls,default,defer,disabled,hidden,loop,open,required,reversed,scoped,seamless,
+  checked,muted,multiple,selected
+`.split(',');
+
+
+function escapeHtml(str) {
+  const innerStr = '' + str;
+  const escapeRE = /["'&<>]/;
+  const match = escapeRE.exec(innerStr);
+
+  if(!match) {
+    return innerStr;
+  }
+
+  let html = '';
+  let escaped;
+  let index;
+  let lastIndex = 0;
+  for (index = match.index; index < innerStr.length; index++) {
+    switch (innerStr.charCodeAt(index)) {
+      case 34:  // "
+        escaped = '&quot;'
+        break;
+      case 38:  // &
+        escaped = '&amp;'
+        break;
+      case 39:  // '
+        escaped = '&#39;'
+        break;
+      case 60:  // <
+        escaped = '&lt;'
+        break;
+      case 62:  // >
+        escaped = '&gt;'
+        break;
+      default:
+        continue;
+    }
+
+    if(lastIndex !== index) {
+      html += innerStr.substring(lastIndex, index);
+    }
+
+    lastIndex = index + 1;
+    html += escaped;
+  }
+
+  return lastIndex !== index ? html + innerStr.substring(lastIndex, index) : html;
+}
+
+function renderDynamicAttr(key, value) {
+  const isBooleanAttr = BOOLEAN_ATTRS.includes(key);
+  if(isBooleanAttr) {
+    return value === false ? '' : ` ${key}`
+  } else if (isSSRSafeAttrName(key)) {
+    // 对于其他安全的属性，执行完整的渲染
+    // 注意：对于属性值，我们需要对它执行 HTML 转义操作 防御 xss 攻击。
+    return value === '' ? ` ${key}` : ` ${key}="${escapeHtml(value)}"`
+  } else {
+    // 跳过不安全的属性，并打印警告信息
+    console.warn(`Skipped rendering unsafe attribute name: ${key}`)
+    return '';
+  }
+}
+
+
+function renderAttrs(props) {
+  let ret = '';
+  for (const key in props) {
+    if(
+      shouldIgnoreProp.includes(key) || 
+      // 事件
+      /^on[^a-z]/.test(key)
+    ) {
+      continue;
+    }
+    const value = props[key];
+
+    ret += renderDynamicAttr(key, value);
+  }
+
+  return ret;
+}
+```
+
+> 转义非常有用，可以有效地预防 XSS 攻击。HTML 转义也非常简单，就是将特殊字符转换为对应的 HTML 实体。
