@@ -156,3 +156,9 @@ function renderElementVNode(vnode) {
 - 标签的文本子节点也需要 HTML 转义
 
 这些问题都需要边界条件，逐个处理即可
+
+1. 自闭合类型标签
+   这个简单，自闭合类型的标签是固定的，只需要特殊处理即可。自闭合标签术语叫做 void element，它的完整列表如下，这个列表在 WHATWG 中有列出
+   ```js
+   const VOID_TAGS ='area,base,br,col,embed,hr,img,input,link,meta,param,source,track,wbr';
+  ``` 

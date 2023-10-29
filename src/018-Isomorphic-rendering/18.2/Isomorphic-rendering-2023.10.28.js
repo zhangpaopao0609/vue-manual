@@ -1,3 +1,5 @@
+const VOID_TAGS = 'area,base,br,col,embed,hr,img,input,link,meta,param,source,track,wbr'.split(',');
+
 function renderElementVNode(vnode) {
   let ret = '';
   // 取出标签名称 tag 和标签属性 props，以及标签的子节点
@@ -12,8 +14,14 @@ function renderElementVNode(vnode) {
     }
   }
 
+  const isVoidElement = VOID_TAGS.includes(type)
+
   // 开始标签的闭合
-  ret += `>`;
+  ret += isVoidElement ? `/>` : '>';
+
+  if(isVoidElement) {
+    return ret;
+  }
 
   // 处理子节点
   // 如果子节点的类型是字符串，则是文本内容，直接拼接
