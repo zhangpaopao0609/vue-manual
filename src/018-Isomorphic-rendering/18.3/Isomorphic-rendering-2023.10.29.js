@@ -117,126 +117,11 @@ function renderElementVNode(vnode) {
       ret += renderElementVNode(child)
     })
   }
+  // 结束标签
   ret += `</${type}>`;
 
   // 返回拼接好的 HTML 字符串
   return ret;
-}
-
-function renderComponentVNode(vnode) {
-  const { type } = vnode;
-  const isFunctional = typeof type === 'function';
-  let componentOptions = vnode.type;
-
-  if(isFunctional) {
-    // 函数式组件
-    componentOptions = {
-      render: vnode.type,
-      props: vnode.type.props,
-    }
-  }
-
-  const { render, data, setup, beforeCreate, created, props: propsOption } = componentOptions;
-
-  beforeCreate && beforeCreate();
-
-  // 服务端无需响应式
-  const state = data ? data() : null;
-
-  const [props, attrs] = resolveProps(propsOption, vnode.props);
-
-  const slots = vnode.children || {};
-
-  const instance = {
-    state, 
-    props, // 无需浅响应
-    isMounted: false,
-    subTree: null,
-    slots,
-    mounted: [],
-    keepAliveCtx: null,
-  }
-
-  function emit(event, ...payload) {
-    const eventName = `on${event.slice(0, 1).toUpperCase()}${event.slice(1)}`;
-    const handler = instance.props[eventName];
-    if(handler) {
-      handler(...payload)
-    } else {
-      console.warn('事件不存在')
-    }
-  }
-
-  // setup
-  let setupState = null;
-  let compRender = render;
-  if(setup) {
-    const setupContext = { attrs, emit, slots };
-    setCurrentInstance(instance);
-    const setupResult = setup(shallowReadonly(instance.props), setupContext);
-    setCurrentInstance(null);
-
-    if(typeof setupResult === 'function') {
-      if (render) console.error('setup 函数返回渲染函数，render 选项将被忽略');
-      compRender = setupResult;
-    } else {
-      setupState = setupResult;
-    }
-  }
-
-  vnode.component = instance;
-
-  const renderContext = new Proxy(instance, {
-    get(target, key, receiver) {
-      const {state, props, slots} = target;
-
-      if(key ==='$slots'){
-        return slots
-      }
-
-      if(state && key in state) {
-        return state[key]
-      } else if(key in props) {
-        return props[key]
-      } else if(setupState && key in setupState) {
-        return setupState[key]
-      } else {
-        console.error(`${key} 不存在`)
-      }
-    },
-    set(target, key, newVal, receiver) {
-      const { state, props} = target;
-
-      if(state && key in state) {
-        state[key] = newVal;
-      } else if(key in props) {
-        props[key] = newVal;
-      } else if(setupState && key in setupState) {
-        setupState[key] = newVal;
-      } else {
-        console.error(`${key} 不存在`)
-      }
-    }
-  })
-
-  created && created.call(renderContext);
-  const subTree = render.call(renderContext, renderContext);
-  return renderVNode(subTree)
-}
-
-function renderVNode(vnode) {
-  const type = typeof vnode.type;
-  if(type === 'string') {
-    return renderElementVNode(vnode);
-  } else if (type === 'object' || type !== 'function') {
-    return renderComponentVNode(vnode)
-  } else if (vnode.type === TEXT) {
-    // 处理文本
-  } else if(vnode.type === Fragment) {
-    // 处理 Fragment
-  } else {
-
-  }
 }
 
 const ElementVNode = {
@@ -245,20 +130,8 @@ const ElementVNode = {
     id: 'foo',
   },
   children: [
-    { type: 'p', children: 'hello' },
-    { type: MyComponent }
+    { type: 'p', children: 'hello' }
   ]
 };
 
-const MyComponent = {
-  setup() {
-    return () => {
-      return {
-        type: 'div',
-        children: 'hello',
-      }
-    }
-  }
-}
-
-console.log(renderVNode(ElementVNode));
+console.log(renderElementVNode(ElementVNode));
