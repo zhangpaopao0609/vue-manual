@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4.1 响应式数据与副作用函数</title>
+</head>
+<body>
+  <script>
+    const obj = {
+      text: '响应式数据与副作用函数'
+    }
+
+    // 这就是副作用函数
+    function effect() {
+      document.body.innerHTML = obj.text
+    }
+    
+    setTimeout(() => {
+      obj.text = '我变化了'
+    }, 2000);
+  </script>
+</body>
+</html>

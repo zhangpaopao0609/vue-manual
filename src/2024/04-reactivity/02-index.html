@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4.2 响应式数据的基本实现</title>
+</head>
+<body>
+  <script>
+    // 收集与执行的过程
+    const BUCKET = new Map();
+    let activeEffectFn = null;
+
+    function reactive(obj) {
+      return new Proxy(obj, {
+        get(target, key) {
+          // get 时收集
+          // 那么收集到哪里呢？收集到一个全局桶里面
+          // 怎么一个数据结构呢？ Map<obj, Map<obj.key, Set<effectFn>()>()>()
+          // 那么就有一个问题了，当前的 activeEffectFn 是什么呢？那么就用全局变量记录了
+          if(!BUCKET.has(target)) {
+            BUCKET.set(target, new Map())
+          }
+          const objMap = BUCKET.get(target);
+
+          if(!objMap.has(key)) {
+            objMap.set(key, new Set());
+          }
+          const keySet = objMap.get(key);
+
+          keySet.add(activeEffectFn);
+
+          return target[key];
+        },
+        set(target, key, value) {
+          // set 时触发
+          target[key] = value;
+
+          if(!BUCKET.has(target)) return;
+          const objMap = BUCKET.get(target);
+          if(!objMap.has(key)) return;
+          const keySet = objMap.get(key);
+          keySet.forEach(fn => fn());
+        }
+      })
+    } 
+
+    function effect(fn) {
+      activeEffectFn = fn;
+      fn();
+    }
+
+    const obj = reactive({
+      text: '响应式数据与副作用函数'
+    })
+
+    effect(() => document.body.innerHTML = obj.text);
+    
+    setTimeout(() => {
+      obj.text = '响应式数据的基本实现'
+    }, 4000);
+  </script>
+</body>
+</html>
