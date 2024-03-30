@@ -1,18 +1,39 @@
 {
   "name": "vue-manual",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
   "type": "module",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "version": "0.0.1",
+  "private": true,
+  "packageManager": "pnpm@8.6.12",
+  "description": "front end project basic template",
+  "author": "zhangpaopao0609",
+  "license": "MIT",
+  "homepage": "https://github.com/zhangpaopao0609/vue-manual",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhangpaopao0609/vue-manual.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/zhangpaopao0609/vue-manual/issues"
+  },
+  "engines": {
+    "node": "^14.18.0 || >=16.10.0"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky"
+  },
   "devDependencies": {
-    "@antfu/eslint-config": "^2.11.5",
-    "eslint": "^8.57.0",
-    "eslint-plugin-format": "^0.1.0"
+    "@antfu/eslint-config": "^2.8.0",
+    "@commitlint/cli": "^19.0.3",
+    "@commitlint/config-conventional": "^19.0.3",
+    "eslint-plugin-format": "^0.1.0",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "typescript": "^5.3.3"
+  },
+  "lint-staged": {
+    "*": "eslint --fix"
   }
 }

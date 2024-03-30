@@ -1,4 +1,13 @@
 {
+  // 文件嵌套：看个人习惯
+  // "explorer.fileNesting.enabled": true,
+  // "explorer.fileNesting.expand": false,
+  // "explorer.fileNesting.patterns": {
+  //   "package.json": ".npmrc, pnpm-lock.yaml,  pnpm-workspace.yaml",
+  //   ".gitignore": ".gitmodules",
+  //   ".eslintrc.js": "commitlint.config.js, stylelint.config.js",
+  // },
+
   // Enable the ESlint flat config support
   "eslint.experimental.useFlatConfig": true,
 
@@ -38,8 +47,52 @@
     "json",
     "jsonc",
     "yaml",
-    "toml",
-    "gql",
-    "graphql"
+    "toml"
+  ],
+
+  // json 文件自动识别为 jsonc
+  "files.associations": {
+    "*.json": "jsonc"
+  },
+
+  // 注释相关设置：注释高亮 ! todo ??
+  "better-comments.highlightPlainText": true,
+  "better-comments.tags": [
+    {
+      "tag": "??",
+      "color": "#E25530",
+      "strikethrough": false,
+      "underline": false,
+      "backgroundColor": "transparent",
+      "bold": false,
+      "italic": false
+    },
+    {
+      "tag": "todo",
+      "color": "#FF8C00",
+      "strikethrough": false,
+      "underline": false,
+      "backgroundColor": "transparent",
+      "bold": false,
+      "italic": false
+    },
+    {
+      "tag": "*",
+      "color": "#98C379",
+      "strikethrough": false,
+      "underline": false,
+      "backgroundColor": "transparent",
+      "bold": false,
+      "italic": false
+    },
+    {
+      "tag": "!",
+      "color": "#FF2D00",
+      "strikethrough": false,
+      "underline": false,
+      "backgroundColor": "transparent",
+      "bold": false,
+      "italic": false
+    }
   ]
 }
