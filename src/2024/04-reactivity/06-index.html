@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>4.5 嵌套的 effect 与 effect 栈</title>
+    <title>4.6 避免无限递归</title>
   </head>
   <body>
     <script>
@@ -46,7 +46,12 @@
         if (!depsMap) return;
         const effects = depsMap.get(key);
         if (!effects) return;
-        const effectsToRun = new Set(effects);
+        const effectsToRun = new Set();
+        effects.forEach((effectFn) => {
+          if (effectFn !== activeEffect) {
+            effectsToRun.add(effectFn);
+          }
+        });
         effectsToRun.forEach((effectFn) => effectFn());
       }
 
@@ -77,38 +82,22 @@
       }
 
       const obj = reactive({
-        a: 'a',
-        b: 'b',
-        c: 'c',
+        foo: 1,
       });
 
       effect(() => {
-        console.log('a');
-        document.body.innerHTML = obj.a;
-        effect(() => {
-          console.log('b');
-          document.body.innerHTML = obj.b;
-        });
-        document.body.innerHTML = obj.c;
-        console.log('c');
+        // obj.foo++;
+        obj.foo = obj.foo + 1;
+        /**
+         * obj.foo 收集，然后又设置 obj.foo，所以刚刚收集完成，又触发了 fn 执行，那么就又触发了收集执行，所以就在收集和触发无限循环了
+         * 那怎么解决呢？仔细观察，收集时是 activeEffect 是 fn，触发时同样还是 fn，所以，只需要判断一下，如果正在执行的 fn 就是 activeEffect 的话，那么就不执行了呗
+         */
+        document.body.innerHTML = obj.foo;
       });
 
-      console.log(BUCKET);
-
       setTimeout(() => {
-        obj.a = 'a 改变，那么应该执行 a, b, c';
-        console.log(BUCKET);
+        obj.foo++;
       }, 2000);
-
-      setTimeout(() => {
-        obj.b = 'b 改变，那么应该执行 b';
-        console.log(BUCKET);
-      }, 4000);
-
-      setTimeout(() => {
-        obj.c = 'c 改变，那么应该执行 a b c';
-        console.log(BUCKET);
-      }, 6000);
     </script>
   </body>
 </html>
