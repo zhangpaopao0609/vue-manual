@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>4.8 计算属性 computed 和 lazy</title>
+  </head>
+  <body>
+    <script>
+      /**
+       * 收集与执行的过程
+       * BUCKET 的数据结构很重要
+       * target
+       *    —— key —— effectFn ——
+       *    —— key —— effectFn
+       *    —— key —— effectFn
+       *  WeakMap<target, Map<key, Set<fn>()>>()
+       */
+
+      /**
+       * 这里为什么要用 WeakMap 呢？因为 WeakMap 是弱引用，不会影响垃圾回收(相反 Map 是强引用)
+       * 这样可以使得当用户侧代码对 target 没有任何引用的时候，target 能及时被垃圾回收掉
+       */
+      const BUCKET = new WeakMap();
+
+      let activeEffect = null;
+      const activeEffectStack = [];
+
+      function track(target, key) {
+        if (!activeEffect) return;
+        let depsMap = BUCKET.get(target);
+        if (!depsMap) {
+          BUCKET.set(target, (depsMap = new Map()));
+        }
+        // 依赖集合
+        let deps = depsMap.get(key);
+        if (!deps) {
+          depsMap.set(key, (deps = new Set()));
+        }
+        activeEffect.deps.add(deps);
+        deps.add(activeEffect);
+      }
+
+      function trigger(target, key) {
+        const depsMap = BUCKET.get(target);
+        if (!depsMap) return;
+        const effects = depsMap.get(key);
+        if (!effects) return;
+        const effectsToRun = new Set();
+        effects.forEach((effectFn) => {
+          if (effectFn !== activeEffect) {
+            effectsToRun.add(effectFn);
+          }
+        });
+        effectsToRun.forEach((effectFn) => {
+          if (effectFn.options.scheduler) {
+            effectFn.options.scheduler(effectFn);
+          } else {
+            effectFn();
+          }
+        });
+      }
+
+      function reactive(obj) {
+        return new Proxy(obj, {
+          get(target, key) {
+            track(target, key);
+            return target[key];
+          },
+          set(target, key, newVal) {
+            target[key] = newVal;
+            trigger(target, key);
+          },
+        });
+      }
+
+      function effect(fn, options = {}) {
+        const effectFn = () => {
+          activeEffect = effectFn;
+          activeEffectStack.push(activeEffect);
+          effectFn.deps.forEach((dep) => dep.delete(effectFn));
+          const res = fn();
+          activeEffectStack.pop();
+          activeEffect = activeEffectStack[activeEffectStack.length - 1];
+          return res;
+        };
+        effectFn.deps = new Set();
+        effectFn.options = options;
+        if (!options.lazy) {
+          effectFn();
+        }
+        return effectFn;
+      }
+
+      // 定义一个任务队列，用于装载 effectFn
+      const jobQueue = new Set();
+      // promise 实例，用它将一个任务添加到微任务队列中
+      const p = Promise.resolve();
+      // 是否正在刷新队列
+      let isFlushing = false;
+      function scheduler(fn) {
+        jobQueue.add(fn);
+        if (!isFlushing) return;
+        isFlushing = true;
+        p.then(() => {
+          jobQueue.forEach((job) => job());
+        }).finally(() => {
+          isFlushing = false;
+        });
+      }
+
+      function computed(getter) {
+        let value;
+        let dirty = true;
+
+        const effectFn = effect(getter, {
+          lazy: true,
+          scheduler(fn) {
+            if (!dirty) {
+              dirty = true;
+              trigger(obj, 'value');
+            }
+          },
+        });
+
+        const obj = {
+          get value() {
+            track(obj, 'value');
+            if (dirty) {
+              value = effectFn();
+              dirty = false;
+            }
+            return value;
+          },
+        };
+
+        return obj;
+      }
+
+      const obj = reactive({
+        foo: 1,
+        bar: 10,
+      });
+
+      const sum = computed(() => {
+        console.log('我执行了');
+        return obj.foo + obj.bar;
+      });
+
+      effect(() => {
+        // 直接这样的话就不会触发 track 和 trigger 了
+        console.log(sum.value);
+      });
+
+      setTimeout(() => {
+        obj.foo++;
+      }, 2000);
+    </script>
+  </body>
+</html>
